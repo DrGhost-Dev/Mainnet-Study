@@ -52,15 +52,15 @@ type Snapshot struct {
 	config   *params.CliqueConfig // Consensus engine parameters to fine tune behavior
 	sigcache *lru.ARCCache        // Cache of recent block signatures to speed up ecrecover
 
-	Number  uint64                      `json:"number"`  // Block number where the snapshot was created
-	Hash    common.Hash                 `json:"hash"`    // Block hash where the snapshot was created
-	// 해당 시점의 공식 검증자 목록
+	Number uint64      `json:"number"` // Block number where the snapshot was created
+	Hash   common.Hash `json:"hash"`   // Block hash where the snapshot was created
+	// snapshot 시점의 signer 집합(목록)
 	Signers map[common.Address]struct{} `json:"signers"` // Set of authorized signers at this moment
 	Recents map[uint64]common.Address   `json:"recents"` // Set of recent signers for spam protections
 	// 각 후보자가 현재까지 받은 총 득표수
-	Votes   []*Vote                     `json:"votes"`   // List of votes cast in chronological order
+	Votes []*Vote `json:"votes"` // List of votes cast in chronological order
 	// 누가 누구에게 투표했는지에 대한 상세 내역 ([투표자][후보]투표내용)
-	Tally   map[common.Address]Tally    `json:"tally"`   // Current vote tally to avoid recalculating
+	Tally map[common.Address]Tally `json:"tally"` // Current vote tally to avoid recalculating
 }
 
 // signersAscending implements the sort interface to allow sorting a list of addresses

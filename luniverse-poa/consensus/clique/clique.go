@@ -655,8 +655,12 @@ func (c *Clique) Prepare(consensusConfig *common.ConsensusConfig, chain consensu
 		c.lock.RLock()
 
 		// Gather all the proposals that make sense voting on
+		// proposals 중에 유효한 address들을 모은다.
 		addresses := make([]common.Address, 0, len(c.proposals))
 		for address, authorize := range c.proposals {
+			// 유효한 투표를 골라서 addresses에 추가를 한다.
+			// 유효한 투표는(validator인데 validator 자격을 취소 시키는 것, 일반 노드인데 validator로 추가시키는것)
+			// validator인데 validator 자격을 추가하는 것은 논리적 모순이 있는 안건
 			if snap.validVote(address, authorize) {
 				addresses = append(addresses, address)
 			}
@@ -680,12 +684,14 @@ func (c *Clique) Prepare(consensusConfig *common.ConsensusConfig, chain consensu
 	header.Difficulty = calcDifficulty(snap, c.signer, number)
 
 	// Ensure the extra data has all its components
+	// extra가 extraVanity 부족한 만큼 새로 채움
 	if len(header.Extra) < extraVanity {
 		header.Extra = append(header.Extra, bytes.Repeat([]byte{0x00}, extraVanity-len(header.Extra))...)
 	}
 	header.Extra = header.Extra[:extraVanity]
 
 	// append time placeholder which will be replaced with time when sealing is completed.
+	// 서명이 될때 timestamp를 기록하기 위한 공간을 만듦
 	sealTimestampDataBytes := make([]byte, 8)
 	header.Extra = append(header.Extra, sealTimestampDataBytes[:]...)
 
@@ -699,6 +705,7 @@ func (c *Clique) Prepare(consensusConfig *common.ConsensusConfig, chain consensu
 		protoType[0] = 0x01 // List current singers (only in Epoch block)
 
 		signers := snap.signers()
+		// 두 번째 인자를 protoLen에 덮어 쓴 다음에 빅 에디안 방식으로 저장
 		binary.BigEndian.PutUint16(protoLen, uint16(len(signers)*common.AddressLength))
 
 		for _, signer := range signers {
@@ -769,7 +776,7 @@ func (c *Clique) Finalize(consensusConfig *common.ConsensusConfig, chain consens
 
 		fromAddr := common.HexToAddress(common.VirtualMinerAddress) /* pre-defined address used to send block reward to target contract */
 		// 새로 발행되는 총 보상액을 이 가상 주소의 잔고로 설정합니다. 이렇게 하면 이후 모든 보상 분배가 이 가상 주소로부터 '이체(transfer)'되는 것처럼 처리할 수 있어, 전체 로직과 상태 관리가 단순해집니다.
-		state.SetBalance(fromAddr, luniversePoABlockReward)         /* first, temporarily deposit total block reward, then distribute it to targets */
+		state.SetBalance(fromAddr, luniversePoABlockReward) /* first, temporarily deposit total block reward, then distribute it to targets */
 
 		// reward to coinbase
 		// 검증자에게 보상 분배
@@ -834,6 +841,7 @@ func (c *Clique) Finalize(consensusConfig *common.ConsensusConfig, chain consens
 
 		state.SetBalance(fromAddr, big.NewInt(0)) /* reset it */
 	}
+	// stateRoot를 만들어 header.Root에 저장
 	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 	header.UncleHash = types.CalcUncleHash(nil)
 }

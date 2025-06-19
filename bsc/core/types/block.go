@@ -115,10 +115,10 @@ type Header struct {
 	GasLimit    uint64         `json:"gasLimit"         gencodec:"required"`
 	GasUsed     uint64         `json:"gasUsed"          gencodec:"required"`
 	// second로 저장
-	Time        uint64         `json:"timestamp"        gencodec:"required"`
-	Extra       []byte         `json:"extraData"        gencodec:"required"`
-	MixDigest   common.Hash    `json:"mixHash"`
-	Nonce       BlockNonce     `json:"nonce"`
+	Time      uint64      `json:"timestamp"        gencodec:"required"`
+	Extra     []byte      `json:"extraData"        gencodec:"required"`
+	MixDigest common.Hash `json:"mixHash"`
+	Nonce     BlockNonce  `json:"nonce"`
 
 	// BaseFee was added by EIP-1559 and is ignored in legacy headers.
 	BaseFee *big.Int `json:"baseFeePerGas" rlp:"optional"`
@@ -746,6 +746,7 @@ type DiffAccountsInBlock struct {
 var extraSeal = 65 // Fixed number of extra-data suffix bytes reserved for signer seal
 
 // SealHash returns the hash of a block prior to it being sealed.
+// 서명(Seal)이 아직 포함되지 않은, '서명 직전' 상태의 블록 헤더에 대한 해시값
 func SealHash(header *Header, chainId *big.Int) (hash common.Hash) {
 	hasher := sha3.NewLegacyKeccak256()
 	EncodeSigHeader(hasher, header, chainId)

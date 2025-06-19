@@ -198,24 +198,30 @@ func isToSystemContract(to common.Address) bool {
 // ecrecover extracts the Ethereum account address from a signed header.
 func ecrecover(header *types.Header, sigCache *lru.ARCCache, chainId *big.Int) (common.Address, error) {
 	// If the signature's already cached, return that
+	// 헤더 해시를 가지고 옴
 	hash := header.Hash()
 	if address, known := sigCache.Get(hash); known {
 		return address.(common.Address), nil
 	}
 	// Retrieve the signature from the header extra-data
+	// extra의 필수 공간은 extraVanity + extraSeal
 	if len(header.Extra) < extraSeal {
 		return common.Address{}, errMissingSignature
 	}
+	// 헤더에서 서명 데이터를 추출
 	signature := header.Extra[len(header.Extra)-extraSeal:]
 
 	// Recover the public key and the Ethereum address
+	// 서명 전 블록 해시와 서명 데이터라를 사용하여, 그 서명을 한 사람의 공개키(pubkey)를 복원해내는 기능
 	pubkey, err := crypto.Ecrecover(types.SealHash(header, chainId).Bytes(), signature)
 	if err != nil {
 		return common.Address{}, err
 	}
 	var signer common.Address
+	// Keccak256 해시 함수에 pubkey를 넣어 계정 주소를 추출
 	copy(signer[:], crypto.Keccak256(pubkey[1:])[12:])
 
+	// 메모리 캐시에 저장
 	sigCache.Add(hash, signer)
 	return signer, nil
 }
@@ -255,16 +261,16 @@ type Parlia struct {
 
 	lock sync.RWMutex // Protects the signer fields
 
-	// 내부 컨트랙트 호출을 위한 JSON-RPC 브리지 
-	ethAPI                     *ethapi.BlockChainAPI
-	VotePool                   consensus.VotePool
+	// 내부 컨트랙트 호출을 위한 JSON-RPC 브리지
+	ethAPI   *ethapi.BlockChainAPI
+	VotePool consensus.VotePool
 	// Validator Set Contract와 통신하기 위한 컨트랙트 ABI
 	validatorSetABIBeforeLuban abi.ABI
 	validatorSetABI            abi.ABI
 	// Slash Contract와 통신하기 위한 컨트랙트 ABI
-	slashABI                   abi.ABI
+	slashABI abi.ABI
 	// Stake Hub Contract와 통신하기 위한 컨트랙트 ABI
-	stakeHubABI                abi.ABI
+	stakeHubABI abi.ABI
 
 	// The fields below are for testing only
 	fakeDiff bool // Skip difficulty verifications
@@ -407,7 +413,7 @@ func getValidatorBytesFromHeader(header *types.Header, chainConfig *params.Chain
 	if header.Number.Uint64()%epochLength != 0 {
 		return nil
 	}
-	num := int(header.Extra[extraVanity])
+	num := int(header.Extra[extraVanity]) // Validators Number
 	start := extraVanity + validatorNumberSize
 	end := start + num*validatorBytesLength
 	extraMinLen := end + extraSeal
@@ -594,6 +600,7 @@ func (p *Parlia) verifyHeader(chain consensus.ChainHeaderReader, header *types.H
 		return err
 	}
 	// Ensure that the extra-data contains a signer list on checkpoint, but none otherwise
+	// validators bytes를 추출
 	signersBytes := getValidatorBytesFromHeader(header, p.chainConfig, epochLength)
 	isEpoch := number%epochLength == 0
 	if !isEpoch && len(signersBytes) != 0 {
@@ -764,7 +771,9 @@ func (p *Parlia) snapshot(chain consensus.ChainHeaderReader, number uint64, hash
 
 	for snap == nil {
 		// If an in-memory snapshot was found, use that
+		// snapshot 객체 가지고 옴
 		if s, ok := p.recentSnaps.Get(hash); ok {
+			// 타입 단언
 			snap = s.(*Snapshot)
 			break
 		}
@@ -781,8 +790,10 @@ func (p *Parlia) snapshot(chain consensus.ChainHeaderReader, number uint64, hash
 		// If we're at the genesis, snapshot the initial state. Alternatively if we have
 		// piled up more headers than allowed to be reorged (chain reinit from a freezer),
 		// consider the checkpoint trusted and snapshot it.
+		// genesis 블록(0번)일 때 스냅샷이 없으니까 생성
 
 		// Unable to retrieve the exact EpochLength here.
+		// 헤더 ExtraData에 ‘검증자 목록+turnLength’를 싣는 주기
 		// As known
 		// 		defaultEpochLength = 200 && turnLength = 1 or 4
 		// 		lorentzEpochLength = 500 && turnLength = 8
@@ -802,6 +813,7 @@ func (p *Parlia) snapshot(chain consensus.ChainHeaderReader, number uint64, hash
 					blockHash = checkpoint.Hash()
 				}
 			} else {
+				// checkpoint 시점은 현 Epoch 내부에 존재. 검증자 리스트 를 안전하게 파싱 가능
 				checkpoint = chain.GetHeaderByNumber(number - offset)
 				blockHeader := chain.GetHeaderByNumber(number)
 				if blockHeader != nil {
@@ -825,6 +837,7 @@ func (p *Parlia) snapshot(chain consensus.ChainHeaderReader, number uint64, hash
 			}
 			if checkpoint != nil && blockHash != (common.Hash{}) {
 				// get validators from headers
+				// 찾아낸 과거 헤더의 extraData에서 검증자 목록 정보를 추출(Parsing)
 				validators, voteAddrs, err := parseValidators(checkpoint, p.chainConfig, epochLength)
 				if err != nil {
 					return nil, err
@@ -834,6 +847,7 @@ func (p *Parlia) snapshot(chain consensus.ChainHeaderReader, number uint64, hash
 				snap = newSnapshot(p.config, p.signatures, number, blockHash, validators, voteAddrs, p.ethAPI)
 
 				// get turnLength from headers and use that for new turnLength
+				// 과거의 신뢰할 수 있는 기준점(checkpoint)의 turnLength를 추출
 				turnLength, err := parseTurnLength(checkpoint, p.chainConfig, epochLength)
 				if err != nil {
 					return nil, err
@@ -884,10 +898,12 @@ func (p *Parlia) snapshot(chain consensus.ChainHeaderReader, number uint64, hash
 	}
 
 	// Previous snapshot found, apply any pending headers on top of it
+	// 헤더 목록 순서 뒤집기
 	for i := 0; i < len(headers)/2; i++ {
 		headers[i], headers[len(headers)-1-i] = headers[len(headers)-1-i], headers[i]
 	}
 
+	// 수집한 중간 헤더들을 기준 스냅샷에 적용하여 최종 스냅샷을 완성하고, 다음 사용을 위해 캐시에 저장하는 단계
 	snap, err := snap.apply(headers, chain, parents, p.chainConfig)
 	if err != nil {
 		return nil, err
@@ -940,6 +956,7 @@ func (p *Parlia) verifySeal(chain consensus.ChainHeaderReader, header *types.Hea
 	}
 
 	// Resolve the authorization key and check against validators
+	// signer 주소를 얻음
 	signer, err := ecrecover(header, p.signatures, p.chainConfig.ChainID)
 	if err != nil {
 		return err
@@ -950,7 +967,9 @@ func (p *Parlia) verifySeal(chain consensus.ChainHeaderReader, header *types.Hea
 	}
 
 	// check for double sign & add to cache
+	// parentHash + coinbase
 	key := proposalKey(*header)
+	// 이중 서명 방지
 	preHash, ok := p.recentHeaders.Get(key)
 	if ok && preHash != header.Hash() {
 		doubleSignCounter.Inc(1)
@@ -960,15 +979,18 @@ func (p *Parlia) verifySeal(chain consensus.ChainHeaderReader, header *types.Hea
 		p.recentHeaders.Add(key, header.Hash())
 	}
 
+	// signer가 snap에 validator 목록에 있는지 확인
 	if _, ok := snap.Validators[signer]; !ok {
 		return errUnauthorizedValidator(signer.String())
 	}
 
+	// signer가 최근에 서명을 한 적이 있는지 snap에 확인
 	if snap.SignRecently(signer) {
 		return errRecentlySigned
 	}
 
 	// Ensure that the difficulty corresponds to the turn-ness of the signer
+	// 기본값 false, 넘어가도 됨
 	if !p.fakeDiff {
 		inturn := snap.inturn(signer)
 		if inturn && header.Difficulty.Cmp(diffInTurn) != 0 {
@@ -1267,6 +1289,7 @@ func (p *Parlia) verifyTurnLength(chain consensus.ChainHeaderReader, header *typ
 	return errMismatchingEpochTurnLength
 }
 
+// 네트워크의 보안과 안정성(완결성)에 기여한 검증자들에게 프로토콜이 직접 추가 보상
 func (p *Parlia) distributeFinalityReward(chain consensus.ChainHeaderReader, state vm.StateDB, header *types.Header,
 	cx core.ChainContext, txs *[]*types.Transaction, receipts *[]*types.Receipt, systemTxs *[]*types.Transaction,
 	usedGas *uint64, mining bool, tracer *tracing.Hooks) error {
@@ -1428,6 +1451,8 @@ func (p *Parlia) Finalize(chain consensus.ChainHeaderReader, header *types.Heade
 			log.Error("init contract failed")
 		}
 	}
+	// 로컬 노드의 검증자가 out of turn 일 때
+	// in turn 검증자를 조회한다. 최근 검증 기록이 없으면 장기간 참여를 안했으므로 패널티를 부여함.
 	if header.Difficulty.Cmp(diffInTurn) != 0 {
 		spoiledVal := snap.inturnValidator()
 		signedRecently := false
@@ -1444,6 +1469,8 @@ func (p *Parlia) Finalize(chain consensus.ChainHeaderReader, header *types.Heade
 
 		if !signedRecently {
 			log.Trace("slash validator", "block hash", header.Hash(), "address", spoiledVal)
+			// slash()는 “차례를 지키지 않고 장기간 미활동한 검증자를 Slash Contract에 넘겨 페널티 트랜잭션을 생성·적용하는 헬퍼”다.
+			// 이번 블록을 놓친 in-turn 검증자에게 패널티를 줌
 			err = p.slash(spoiledVal, state, header, cx, txs, receipts, systemTxs, usedGas, false, tracer)
 			if err != nil {
 				// it is possible that slash validator failed because of the slash channel is disabled.
@@ -1518,6 +1545,7 @@ func (p *Parlia) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *
 	}
 
 	if header.Number.Cmp(common.Big1) == 0 {
+		// 유틸리티성 컨트랙트 초기화
 		err := p.initContract(state, header, cx, &body.Transactions, &receipts, nil, &header.GasUsed, true, tracer)
 		if err != nil {
 			log.Error("init contract failed")
@@ -1529,6 +1557,7 @@ func (p *Parlia) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *
 		if err != nil {
 			return nil, nil, err
 		}
+		// 이번 블록을 원래 생성했어야 하는 in-turn 검증자 주소를 스냅샷에서 계산해 spoiledVal에 담는다
 		spoiledVal := snap.inturnValidator()
 		signedRecently := false
 		if p.chainConfig.IsPlato(header.Number) {
@@ -1550,6 +1579,7 @@ func (p *Parlia) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *
 		}
 	}
 
+	// 가스비 금고에서 수수료를 검증자에게 분배
 	err := p.distributeIncoming(p.val, state, header, cx, &body.Transactions, &receipts, nil, &header.GasUsed, true, tracer)
 	if err != nil {
 		return nil, nil, err
@@ -1565,6 +1595,7 @@ func (p *Parlia) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *
 	if p.chainConfig.IsFeynman(header.Number, header.Time) && isBreatheBlock(parent.Time, header.Time) {
 		// we should avoid update validators in the Feynman upgrade block
 		if !p.chainConfig.IsOnFeynman(header.Number, parent.Time, header.Time) {
+			// 주기적으로 공식 검증자 목록 자체를 '갱신
 			if err := p.updateValidatorSetV2(state, header, cx, &body.Transactions, &receipts, nil, &header.GasUsed, true, tracer); err != nil {
 				return nil, nil, err
 			}
@@ -1581,14 +1612,17 @@ func (p *Parlia) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *
 	wg := sync.WaitGroup{}
 	wg.Add(2)
 	go func() {
+		// 이 코드는 현재 블록에 포함된 모든 트랜잭션의 실행이 완료된 후, 변경된 최종 '상태 루트(State Root)'의 해시값을 계산
 		rootHash = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 		wg.Done()
 	}()
 	go func() {
+		// 모든 준비가 끝난 개별 부품들(헤더, 바디, 영수증)을 모아, 하나의 완전한 Block 객체로 '조립'하는 역할
 		blk = types.NewBlock(header, body, receipts, trie.NewStackTrie(nil))
 		wg.Done()
 	}()
 	wg.Wait()
+	// blk라는 블록 객체의 헤더(Header)에 있는 Root 필드의 값을, rootHash 값으로 설정(업데이트)
 	blk.SetRoot(rootHash)
 	// Assemble and return the final block for sealing
 	return blk, receipts, nil
@@ -1738,6 +1772,7 @@ func (p *Parlia) Seal(chain consensus.ChainHeaderReader, block *types.Block, res
 		case <-time.After(delay):
 		}
 
+		// Fast-Finality를 위해 헤더.Extra에 Vote Attestation(투표 서명 집계)을 조립-추가
 		err := p.assembleVoteAttestation(chain, header)
 		if err != nil {
 			/* If the vote attestation can't be assembled successfully, the blockchain won't get
@@ -1895,8 +1930,10 @@ func (p *Parlia) Close() error {
 // ==========================  interaction with contract/account =========
 
 // getCurrentValidators get current validators
+// 현재 validator들의 목록들을 조회해서 가지고 옴
 func (p *Parlia) getCurrentValidators(blockHash common.Hash, blockNum *big.Int) ([]common.Address, map[common.Address]*types.BLSPublicKey, error) {
 	// block
+	// 조회하고 싶은 블록 정보를 설정
 	blockNr := rpc.BlockNumberOrHashWithHash(blockHash, false)
 
 	if !p.chainConfig.IsLuban(blockNum) {
@@ -1910,6 +1947,7 @@ func (p *Parlia) getCurrentValidators(blockHash common.Hash, blockNum *big.Int) 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel() // cancel when we are finished consuming integers
 
+	// 스마트 컨트랙트의 method 함수에 대한 ABI-Encoding calldata(function selector)
 	data, err := p.validatorSetABI.Pack(method)
 	if err != nil {
 		log.Error("Unable to pack tx for getMiningValidators", "error", err)
@@ -1930,6 +1968,7 @@ func (p *Parlia) getCurrentValidators(blockHash common.Hash, blockNum *big.Int) 
 
 	var valSet []common.Address
 	var voteAddrSet []types.BLSPublicKey
+	// 바이트 배열을 함수 시그니처에 맞춰 Go 변수(valSet, voteAddrSet) 로 디코딩
 	if err := p.validatorSetABI.UnpackIntoInterface(&[]interface{}{&valSet, &voteAddrSet}, method, result); err != nil {
 		return nil, nil, err
 	}
@@ -1938,9 +1977,12 @@ func (p *Parlia) getCurrentValidators(blockHash common.Hash, blockNum *big.Int) 
 	for i := 0; i < len(valSet); i++ {
 		voteAddrMap[valSet[i]] = &(voteAddrSet)[i]
 	}
+	// valSet은 이번 Epoch에 활동하는 검증자 주소 배열
+	// voteAddrMap 은 “그 주소 → 대응 BLS 공개키” 를 알려 주는 해시맵
 	return valSet, voteAddrMap, nil
 }
 
+// 같은 검증자가 연속적인 in turn 블록을 고의 지연 채굴을 감지하는 기능
 func (p *Parlia) isIntentionalDelayMining(chain consensus.ChainHeaderReader, header *types.Header) (bool, error) {
 	parent := chain.GetHeader(header.ParentHash, header.Number.Uint64()-1)
 	if parent == nil {
@@ -1957,11 +1999,14 @@ func (p *Parlia) isIntentionalDelayMining(chain consensus.ChainHeaderReader, hea
 }
 
 // distributeIncoming distributes system incoming of the block
+// distributeIncoming은 블록 생성 과정에서 발생한 시스템 수입(가스 수수료)을 분배합니다.
 func (p *Parlia) distributeIncoming(val common.Address, state vm.StateDB, header *types.Header, chain core.ChainContext,
 	txs *[]*types.Transaction, receipts *[]*types.Receipt, receivedTxs *[]*types.Transaction, usedGas *uint64, mining bool, tracer *tracing.Hooks) error {
 	// signer
 	coinbase := header.Coinbase
 
+	//  - 이 로직은 'Kepler' 하드포크 이전이고, 시스템 리워드 풀 컨트랙트의 잔액이 최댓값(maxSystemBalance) 미만일 경우에만 실행됩니다.
+	//  - 실행될 경우, 가스비 금고 총 잔액의 1/16을 시스템 리워드 풀로 보냅니다.
 	doDistributeSysReward := !p.chainConfig.IsKepler(header.Number, header.Time) &&
 		state.GetBalance(common.HexToAddress(systemcontracts.SystemRewardContract)).Cmp(maxSystemBalance) < 0
 	if doDistributeSysReward {
@@ -1980,13 +2025,16 @@ func (p *Parlia) distributeIncoming(val common.Address, state vm.StateDB, header
 	}
 
 	balance := state.GetBalance(consensus.SystemAddress)
-	if balance.Cmp(common.U2560) <= 0 {
+	if balance.Cmp(common.U2560) <= 0 { // U2560 = 0
 		return nil
 	}
 
+	// 금고를 깨끗하게 비웁니다.
 	state.SetBalance(consensus.SystemAddress, common.U2560, tracing.BalanceDecreaseBSCDistributeReward)
+	// 금고에 있던 '모든' 돈을 이번 블록을 생성한 검증자(coinbase)에게 더해줍니다.
 	state.AddBalance(coinbase, balance, tracing.BalanceIncreaseBSCDistributeReward)
 	log.Trace("distribute to validator contract", "block hash", header.Hash(), "amount", balance)
+	// 지급된 보상액을 최종 처리하는 함수를 호출합니다.
 	return p.distributeToValidator(balance.ToBig(), val, state, header, chain, txs, receipts, receivedTxs, usedGas, mining, tracer)
 }
 
@@ -2005,8 +2053,10 @@ func (p *Parlia) slash(spoiledVal common.Address, state vm.StateDB, header *type
 		return err
 	}
 	// get system message
+	// 트랜잭션 메시지 구성
 	msg := p.getSystemMessage(header.Coinbase, common.HexToAddress(systemcontracts.SlashContract), data, common.Big0)
 	// apply message
+	// EVM에 적용
 	return p.applyTransaction(msg, state, header, chain, txs, receipts, receivedTxs, usedGas, mining, tracer)
 }
 

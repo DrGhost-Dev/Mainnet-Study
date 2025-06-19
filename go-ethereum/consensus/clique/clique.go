@@ -173,19 +173,19 @@ type Clique struct {
 	// PoA 합의 엔진 설정 값
 	config *params.CliqueConfig // Consensus engine configuration parameters
 	// checkpoint 스냅샷을 디스크에 저장·로드하기 위한 키–값 DB 핸들
-	db     ethdb.Database       // Database to store and retrieve snapshot checkpoints
+	db ethdb.Database // Database to store and retrieve snapshot checkpoints
 	// 최근 블록의 스냅샷을 저장하는 곳
 	recents    *lru.ARCCache // Snapshots for recent block to speed up reorgs
 	signatures *lru.ARCCache // Signatures of recent blocks to speed up mining
 
-	// 검증자(Signer) 목록을 변경(추가/삭제)하기 위한 투표 행위                        
+	// 검증자(Signer) 목록을 변경(추가/삭제)하기 위한 투표 행위
 	proposals map[common.Address]bool // Current list of proposals we are pushing
 
 	// 로컬 노드가 블록을 만들 때 서명에 사용할 내 지갑 주소(내 지갑 주소는 블록 서명 권한이 있는 주소)
 	signer common.Address // Ethereum address of the signing key
 	signFn SignerFn       // Signer function to authorize hashes with
 	// 로컬 서명자 주소와 투표 안건 맵의 동시 접근을 직렬화 / 병렬화하여 데이터 레이스를 막고 성능을 유지하기 위한 읽기/쓰기 뮤텍스
-	lock   sync.RWMutex   // Protects the signer and proposals fields
+	lock sync.RWMutex // Protects the signer and proposals fields
 
 	// The fields below are for testing only
 	fakeDiff bool // Skip difficulty verifications
@@ -520,9 +520,9 @@ func (c *Clique) verifySeal(snap *Snapshot, header *types.Header, parents []*typ
 // 새로 만들 블록의 헤더(header)를 합의 규칙에 맞게 초기화하고 설정하는 역할
 func (c *Clique) Prepare(chain consensus.ChainHeaderReader, header *types.Header) error {
 	// If the block isn't a checkpoint, cast a random vote (good enough for now)
-	// 여기서 checkpoint는 epoch 블록을 의미한다. 
+	// 여기서 checkpoint는 epoch 블록을 의미한다.
 	// 비-Epoch 블록을 만들 때마다 노드는 pending 안건 중 하나를 무작위로 골라 1표를 실어 보낼 수 있으며, Epoch 블록에서는 규칙상 투표를 담지 않는다.
-	
+
 	// zero Value로 초기화
 	header.Coinbase = common.Address{}
 	header.Nonce = types.BlockNonce{}
@@ -540,8 +540,12 @@ func (c *Clique) Prepare(chain consensus.ChainHeaderReader, header *types.Header
 	if number%c.config.Epoch != 0 {
 		// Gather all the proposals that make sense voting on
 		// 투표 안건 준비. 유효한 검증자 추가·제거 안건을 담은 슬라이스
+		// proposals 중에 유효한 address들을 모은다.
 		addresses := make([]common.Address, 0, len(c.proposals))
 		for address, authorize := range c.proposals {
+			// 유효한 투표를 골라서 addresses에 추가를 한다.
+			// 유효한 투표는(validator인데 validator 자격을 취소 시키는 것, 일반 노드인데 validator로 추가시키는것)
+			// validator인데 validator 자격을 추가하는 것은 논리적 모순이 있는 안건
 			if snap.validVote(address, authorize) {
 				addresses = append(addresses, address)
 			}
@@ -554,7 +558,7 @@ func (c *Clique) Prepare(chain consensus.ChainHeaderReader, header *types.Header
 				copy(header.Nonce[:], nonceAuthVote)
 			} else {
 				copy(header.Nonce[:], nonceDropVote)
-			} 
+			}
 		}
 	}
 
@@ -572,14 +576,14 @@ func (c *Clique) Prepare(chain consensus.ChainHeaderReader, header *types.Header
 	}
 	header.Extra = header.Extra[:extraVanity]
 
-	// 만약 현재 블록이 에폭 블록이라면, snap에서 현재 검증자 목록 전체를 가져와 모든 검증자의 주소를 Extra 필드에 순서대로 추가합니다. 
+	// 만약 현재 블록이 에폭 블록이라면, snap에서 현재 검증자 목록 전체를 가져와 모든 검증자의 주소를 Extra 필드에 순서대로 추가합니다.
 	// 이는 온체인에 검증자 목록을 기록하여 투명성을 확보하는 역할을 합니다.
 	if number%c.config.Epoch == 0 {
 		for _, signer := range snap.signers() {
 			header.Extra = append(header.Extra, signer[:]...)
 		}
 	}
-	
+
 	// Extra 필드의 맨 마지막에 extraSeal(65바이트) 만큼의 빈 공간을 추가합니다. 이 공간은 이후 Seal 함수에서 서명 데이터로 채워질 예약석입니다.
 	header.Extra = append(header.Extra, make([]byte, extraSeal)...)
 

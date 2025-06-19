@@ -193,10 +193,11 @@ var (
 		MaxwellTime:         newUint64(1751250600), // 2025-06-30 02:30:00 AM UTC
 
 		Parlia: &ParliaConfig{},
-		BlobScheduleConfig: &BlobScheduleConfig{
-			Cancun: DefaultCancunBlobConfig,
-			Prague: DefaultPragueBlobConfigBSC,
-		},
+		// EIP-4844와 블롭(Blob)에 관한 설정.
+		// BlobScheduleConfig: &BlobScheduleConfig{
+		// 	Cancun: DefaultCancunBlobConfig,
+		// 	Prague: DefaultPragueBlobConfigBSC,
+		// },
 	}
 
 	ChapelChainConfig = &ChainConfig{

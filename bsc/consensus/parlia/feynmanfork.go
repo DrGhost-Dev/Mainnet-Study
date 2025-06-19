@@ -101,10 +101,12 @@ func (p *Parlia) updateValidatorSetV2(state vm.StateDB, header *types.Header, ch
 ) error {
 	// 1. get all validators and its voting power
 	blockNr := rpc.BlockNumberOrHashWithHash(header.ParentHash, false)
+	// StakeHub 시스템 컨트랙트를 호출해서 지정 블록 시점 모든 후보 검증자의 주소 · 투표력 · 투표 주소를 ValidatorItem 배열로 반환
 	validatorItems, err := p.getValidatorElectionInfo(blockNr)
 	if err != nil {
 		return err
 	}
+	// StakeHub 시스템 컨트랙트에 호출해 “이번 선거에서 최대 몇 명까지 검증자로 뽑을 수 있나”를 가져오는 헬퍼.
 	maxElectedValidators, err := p.getMaxElectedValidators(blockNr)
 	if err != nil {
 		return err
