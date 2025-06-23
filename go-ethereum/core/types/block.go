@@ -68,32 +68,32 @@ func (n *BlockNonce) UnmarshalText(input []byte) error {
 
 // Header represents a block header in the Ethereum blockchain.
 type Header struct {
-	ParentHash  common.Hash    `json:"parentHash"       gencodec:"required"`
-	UncleHash   common.Hash    `json:"sha3Uncles"       gencodec:"required"`
-	// 평상시에는 서명자(Signer)의 주소를 나타내지만, 투표 시에는 투표의 대상이 되는 주소를 담는 용도로 재사용
-	Coinbase    common.Address `json:"miner"`
+	ParentHash common.Hash `json:"parentHash"       gencodec:"required"`
+	UncleHash  common.Hash `json:"sha3Uncles"       gencodec:"required"`
+	// 평상시에는 서명자(Signer)의 주소를 나타내지만, 투표 시에는 투표의 대상이 되는 주소를 담는 용도로 재사용. 투표 대상자.
+	Coinbase common.Address `json:"miner"`
 	// 상태 루트(State Root). 블록이 생성된 시점의 이더리움 전체 계정 상태(잔고, 컨트랙트 코드, 스토리지 등)를 머클 패트리샤 트리(Merkle Patricia Trie)로 만든 후, 그 루트 노드의 해시값
-	Root        common.Hash    `json:"stateRoot"        gencodec:"required"`
+	Root common.Hash `json:"stateRoot"        gencodec:"required"`
 	// 트랜잭션 루트(Transactions Root). 블록에 포함된 모든 트랜잭션 목록을 머클 트리로 구성했을 때의 루트 해시값
-	TxHash      common.Hash    `json:"transactionsRoot" gencodec:"required"`
-	ReceiptHash common.Hash    `json:"receiptsRoot"     gencodec:"required"`
+	TxHash      common.Hash `json:"transactionsRoot" gencodec:"required"`
+	ReceiptHash common.Hash `json:"receiptsRoot"     gencodec:"required"`
 	// 이벤트 로그(Logs)를 효율적으로 검색하기 위한 블룸 필터
-	Bloom       Bloom          `json:"logsBloom"        gencodec:"required"`
+	Bloom Bloom `json:"logsBloom"        gencodec:"required"`
 	// 서명자의 상태를 나타냅니다. 블록을 생성하고 서명을 하는 자기 차례에 서명하면 2 (DIFF_INTURN), 차례가 아닐 때 블록을 서명하고 서명을 할 때 1 (DIFF_NOTURN)로 설정
-	Difficulty  *big.Int       `json:"difficulty"       gencodec:"required"`
+	Difficulty *big.Int `json:"difficulty"       gencodec:"required"`
 	// 블록 높이
-	Number      *big.Int       `json:"number"           gencodec:"required"`
+	Number *big.Int `json:"number"           gencodec:"required"`
 	// Block Gas Limit
-	GasLimit    uint64         `json:"gasLimit"         gencodec:"required"`
+	GasLimit uint64 `json:"gasLimit"         gencodec:"required"`
 	// Tx 생성 시 사용된 Gas 값들 의 총합
-	GasUsed     uint64         `json:"gasUsed"          gencodec:"required"`
-	Time        uint64         `json:"timestamp"        gencodec:"required"`
+	GasUsed uint64 `json:"gasUsed"          gencodec:"required"`
+	Time    uint64 `json:"timestamp"        gencodec:"required"`
 	// 추가 데이터 공간. Clique에서는 서명자 정보 등을 담습니다.
-	Extra       []byte         `json:"extraData"        gencodec:"required"`
+	Extra []byte `json:"extraData"        gencodec:"required"`
 	// PoW(Ethash) 알고리즘에 사용되는 값
-	MixDigest   common.Hash    `json:"mixHash"`
+	MixDigest common.Hash `json:"mixHash"`
 	// 검증자 투표(proposal)를 위한 공간으로 재사용됩니다. 검증자를 추가(0xff...f)하거나 삭제(0x00...0)하려는 의도
-	Nonce       BlockNonce     `json:"nonce"`
+	Nonce BlockNonce `json:"nonce"`
 
 	// BaseFee was added by EIP-1559 and is ignored in legacy headers.
 	BaseFee *big.Int `json:"baseFeePerGas" rlp:"optional"`

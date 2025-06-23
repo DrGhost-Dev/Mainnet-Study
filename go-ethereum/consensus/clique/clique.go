@@ -46,6 +46,7 @@ import (
 )
 
 const (
+	// 투표 현황판이라고 생각. 누적된 투표현황을 db에 저장
 	checkpointInterval = 1024 // Number of blocks after which to save the vote snapshot to the database
 	inmemorySnapshots  = 128  // Number of recent vote snapshots to keep in memory
 	inmemorySignatures = 4096 // Number of recent block signatures to keep in memory
@@ -450,6 +451,7 @@ func (c *Clique) snapshot(chain consensus.ChainHeaderReader, number uint64, hash
 		headers[i], headers[len(headers)-1-i] = headers[len(headers)-1-i], headers[i]
 	}
 	// 기존 스냅샷 위에 새 헤더 시퀀스(투표·서명 정보)를 순서대로 반영하여, 최신 검증자·투표·최근서명 상태를 가진 새 스냅샷 을 만들어 주는 함수
+	// 과거 스냅샷에 새로운 블록 헤더 목록을 순차적으로 적용하여 최종 시점의 스냅샷으로 갱신
 	snap, err := snap.apply(headers)
 	if err != nil {
 		return nil, err

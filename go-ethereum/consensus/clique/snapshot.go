@@ -210,6 +210,7 @@ func (s *Snapshot) apply(headers []*types.Header) (*Snapshot, error) {
 	for i, header := range headers {
 		// Remove any votes on checkpoint blocks
 		number := header.Number.Uint64()
+		// Epoch 블록일때 투표 내용 초기화
 		if number%s.config.Epoch == 0 {
 			snap.Votes = nil
 			snap.Tally = make(map[common.Address]Tally)
@@ -223,6 +224,7 @@ func (s *Snapshot) apply(headers []*types.Header) (*Snapshot, error) {
 		if err != nil {
 			return nil, err
 		}
+		// signer가 맞는지 검증하기
 		if _, ok := snap.Signers[signer]; !ok {
 			return nil, errUnauthorizedSigner
 		}
@@ -231,6 +233,7 @@ func (s *Snapshot) apply(headers []*types.Header) (*Snapshot, error) {
 				return nil, errRecentlySigned
 			}
 		}
+		// Recents에 signer 저장
 		snap.Recents[number] = signer
 
 		// Header authorized, discard any previous votes from the signer
