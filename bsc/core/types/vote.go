@@ -23,11 +23,16 @@ type BLSSignature [BLSSignatureLength]byte
 type ValidatorsBitSet uint64
 
 // VoteData represents the vote range that validator voted for fast finality.
+// VoteData는 검증인이 빠른 완결성을 위해 투표한 범위를 나타냅니다.
 type VoteData struct {
-	SourceNumber uint64      // The source block number should be the latest justified block number.
-	SourceHash   common.Hash // The block hash of the source block.
-	TargetNumber uint64      // The target block number which validator wants to vote for.
-	TargetHash   common.Hash // The block hash of the target block.
+	// 소스 블록 번호. 가장 최근에 'Justified'된 블록이어야 합니다.
+	SourceNumber uint64 // The source block number should be the latest justified block number.
+	// 소스 블록의 해시.
+	SourceHash common.Hash // The block hash of the source block.
+	// 검증인이 투표하고자 하는 타겟 블록 번호
+	TargetNumber uint64 // The target block number which validator wants to vote for.
+	// 타겟 블록의 해시
+	TargetHash common.Hash // The block hash of the target block.
 }
 
 // Hash returns the hash of the vote data.
@@ -44,11 +49,14 @@ type VoteEnvelope struct {
 }
 
 // VoteAttestation represents the votes of super majority validators.
+// 과반수 이상의 검증자들을 나타냄
 type VoteAttestation struct {
+	// 투표한 검증인들을 나타냄
 	VoteAddressSet ValidatorsBitSet // The bitset marks the voted validators.
-	AggSignature   BLSSignature     // The aggregated BLS signature of the voted validators' signatures.
-	Data           *VoteData        // The vote data for fast finality.
-	Extra          []byte           // Reserved for future usage.
+	// 투표한 검증인들의 서명을 하나로 합침
+	AggSignature BLSSignature // The aggregated BLS signature of the voted validators' signatures.
+	Data         *VoteData    // The vote data for fast finality.
+	Extra        []byte       // Reserved for future usage.
 }
 
 // Hash returns the vote's hash.

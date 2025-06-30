@@ -298,7 +298,7 @@ func (c *Clique) verifyHeader(chain consensus.ChainHeaderReader, header *types.H
 		return errInvalidUncleHash
 	}
 	// Ensure that the block's difficulty is meaningful (may not be correct at this point)
-	// difficulty값은 반드시 1 Or 0 이여야 함.
+	// difficulty값은 반드시 2 Or 1 이여야 함.
 	if number > 0 {
 		if header.Difficulty == nil || (header.Difficulty.Cmp(diffInTurn) != 0 && header.Difficulty.Cmp(diffNoTurn) != 0) {
 			return errInvalidDifficulty

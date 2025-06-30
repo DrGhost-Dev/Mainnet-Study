@@ -38,15 +38,17 @@ import (
 
 // Snapshot is the state of the validatorSet at a given point.
 type Snapshot struct {
-	config   *params.ParliaConfig // Consensus engine parameters to fine tune behavior
-	ethAPI   *ethapi.BlockChainAPI
+	config *params.ParliaConfig // Consensus engine parameters to fine tune behavior
+	ethAPI *ethapi.BlockChainAPI
+	// common.hash - common.Address(validator의 주소)
 	sigCache *lru.ARCCache // Cache of recent block signatures to speed up ecrecover
 
-	Number           uint64                            `json:"number"`                // Block number where the snapshot was created
-	Hash             common.Hash                       `json:"hash"`                  // Block hash where the snapshot was created
-	EpochLength      uint64                            `json:"epoch_length"`          // Number of Blocks in one epoch
-	BlockInterval    uint64                            `json:"block_interval"`        // Block Interval in milliseconds
-	TurnLength       uint8                             `json:"turn_length"`           // Length of `turn`, meaning the consecutive number of blocks a validator receives priority for block production
+	Number        uint64      `json:"number"`         // Block number where the snapshot was created
+	Hash          common.Hash `json:"hash"`           // Block hash where the snapshot was created
+	EpochLength   uint64      `json:"epoch_length"`   // Number of Blocks in one epoch
+	BlockInterval uint64      `json:"block_interval"` // Block Interval in milliseconds
+	TurnLength    uint8       `json:"turn_length"`    // Length of `turn`, meaning the consecutive number of blocks a validator receives priority for block production
+	// validator - ValidatorInfo
 	Validators       map[common.Address]*ValidatorInfo `json:"validators"`            // Set of authorized validators at this moment
 	Recents          map[uint64]common.Address         `json:"recents"`               // Set of recent validators for spam protections
 	RecentForkHashes map[uint64]string                 `json:"recent_fork_hashes"`    // Set of recent forkHash
@@ -54,7 +56,9 @@ type Snapshot struct {
 }
 
 type ValidatorInfo struct {
-	Index       int                `json:"index:omitempty"` // The index should offset by 1
+	// 정렬된 전체 검증인 목록에서 이 검증인이 몇 번째에 위치하는지를 나타내는 순번
+	Index int `json:"index:omitempty"` // The index should offset by 1
+	// 해당 검증자의 BLS 공개키
 	VoteAddress types.BLSPublicKey `json:"vote_address,omitempty"`
 }
 
@@ -122,13 +126,13 @@ func loadSnapshot(config *params.ParliaConfig, sigCache *lru.ARCCache, db ethdb.
 		return nil, err
 	}
 	if snap.EpochLength == 0 { // no EpochLength field in old snapshots
-		snap.EpochLength = defaultEpochLength
+		snap.EpochLength = defaultEpochLength // 200 블록
 	}
 	if snap.BlockInterval == 0 { // no BlockInterval field in old snapshots
-		snap.BlockInterval = defaultBlockInterval
+		snap.BlockInterval = defaultBlockInterval // 3000 ms
 	}
 	if snap.TurnLength == 0 { // no TurnLength field in old snapshots
-		snap.TurnLength = defaultTurnLength
+		snap.TurnLength = defaultTurnLength // 1
 	}
 
 	snap.config = config
@@ -249,6 +253,8 @@ func (s *Snapshot) countRecents() map[common.Address]uint8 {
 		if seen <= leftHistoryBound || recent == (common.Address{}) /*when seen == `epochKey`*/ {
 			continue
 		}
+
+		// signer Address - Number
 		counts[recent] += 1
 	}
 	return counts
@@ -537,6 +543,7 @@ func parseValidators(header *types.Header, chainConfig *params.ChainConfig, epoc
 	if !chainConfig.IsLuban(header.Number) {
 		n := len(validatorsBytes) / validatorBytesLengthBeforeLuban
 		result := make([]common.Address, n)
+		// validatorBytes에 저장된 validator들을 하나씩 추출하여 result에 저장
 		for i := 0; i < n; i++ {
 			result[i] = common.BytesToAddress(validatorsBytes[i*validatorBytesLengthBeforeLuban : (i+1)*validatorBytesLengthBeforeLuban])
 		}

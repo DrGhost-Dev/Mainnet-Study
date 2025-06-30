@@ -69,8 +69,8 @@ const (
 	turnLengthSize   = 1  // Fixed number of extra-data suffix bytes reserved for turnLength
 
 	validatorBytesLengthBeforeLuban = common.AddressLength
-	validatorBytesLength            = common.AddressLength + types.BLSPublicKeyLength
-	validatorNumberSize             = 1 // Fixed number of extra prefix bytes reserved for validator number after Luban
+	validatorBytesLength            = common.AddressLength + types.BLSPublicKeyLength // 20 + 48
+	validatorNumberSize             = 1                                               // Fixed number of extra prefix bytes reserved for validator number after Luban
 
 	wiggleTime                uint64 = 1000 // milliseconds, Random delay (per signer) to allow concurrent signers
 	defaultInitialBackOffTime uint64 = 1000 // milliseconds, Default backoff time for the second validator permitted to produce blocks
@@ -246,6 +246,7 @@ type Parlia struct {
 	genesisHash common.Hash
 	db          ethdb.Database // Database to store and retrieve snapshot checkpoints
 
+	// common.hash(blockHash) - *Snapshot
 	recentSnaps   *lru.ARCCache // Snapshots for recent block to speed up
 	signatures    *lru.ARCCache // Signatures of recent blocks to speed up mining
 	recentHeaders *lru.ARCCache //
@@ -404,6 +405,7 @@ func getValidatorBytesFromHeader(header *types.Header, chainConfig *params.Chain
 	}
 
 	if !chainConfig.IsLuban(header.Number) {
+		//          Epoch 블록일 때											                                   	20
 		if header.Number.Uint64()%epochLength == 0 && (len(header.Extra)-extraSeal-extraVanity)%validatorBytesLengthBeforeLuban != 0 {
 			return nil
 		}
@@ -441,6 +443,7 @@ func getVoteAttestationFromHeader(header *types.Header, chainConfig *params.Chai
 		attestationBytes = header.Extra[extraVanity : len(header.Extra)-extraSeal]
 	} else {
 		num := int(header.Extra[extraVanity])
+		//							 1						 20 + 48
 		start := extraVanity + validatorNumberSize + num*validatorBytesLength
 		if chainConfig.IsBohr(header.Number, header.Time) {
 			start += turnLengthSize
@@ -451,8 +454,9 @@ func getVoteAttestationFromHeader(header *types.Header, chainConfig *params.Chai
 		}
 		attestationBytes = header.Extra[start:end]
 	}
-
+	// Vote Attestation 공간에 attestationBytes가 저장
 	var attestation types.VoteAttestation
+	// attestationBytes를 디코딩 하여 Voteattestation에 저장
 	if err := rlp.Decode(bytes.NewReader(attestationBytes), &attestation); err != nil {
 		return nil, fmt.Errorf("block %d has vote attestation info, decode err: %s", header.Number.Uint64(), err)
 	}
@@ -731,10 +735,12 @@ func (p *Parlia) verifyCascadingFields(chain consensus.ChainHeaderReader, header
 
 	// Verify that the gas limit remains within allowed bounds
 	diff := int64(parent.GasLimit) - int64(header.GasLimit)
+	// 현재 블록과 부모 블록의 gaslimit의 차이를 절댓값으로 구함
 	if diff < 0 {
 		diff *= -1
 	}
-	gasLimitBoundDivisor := gasLimitBoundDivisorBeforeLorentz
+	// gasLimit을 조절하는 로직
+	gasLimitBoundDivisor := gasLimitBoundDivisorBeforeLorentz // 256
 	if p.chainConfig.IsLorentz(header.Number, header.Time) {
 		gasLimitBoundDivisor = params.GasLimitBoundDivisor
 	}
@@ -779,6 +785,7 @@ func (p *Parlia) snapshot(chain consensus.ChainHeaderReader, number uint64, hash
 		}
 
 		// If an on-disk checkpoint snapshot can be found, use that
+		//			1024블록
 		if number%checkpointInterval == 0 {
 			if s, err := loadSnapshot(p.config, p.signatures, p.db, hash, p.ethAPI); err == nil {
 				log.Trace("Loaded snapshot from disk", "number", number, "hash", hash)
@@ -800,12 +807,13 @@ func (p *Parlia) snapshot(chain consensus.ChainHeaderReader, number uint64, hash
 		// 		maxwellEpochLength = 1000 && turnLength = 16
 		// So just select block number like 1200, 2200, 3200, we can always get the right validators from `number - 200`
 		offset := uint64(200)
+		//							1000
 		if number == 0 || (number%maxwellEpochLength == offset && (len(headers) > int(params.FullImmutabilityThreshold))) {
 			var (
 				checkpoint    *types.Header
 				blockHash     common.Hash
-				blockInterval = defaultBlockInterval
-				epochLength   = defaultEpochLength
+				blockInterval = defaultBlockInterval // 3000 ms
+				epochLength   = defaultEpochLength   // 200 블록
 			)
 			if number == 0 {
 				checkpoint = chain.GetHeaderByNumber(0)
@@ -837,7 +845,7 @@ func (p *Parlia) snapshot(chain consensus.ChainHeaderReader, number uint64, hash
 			}
 			if checkpoint != nil && blockHash != (common.Hash{}) {
 				// get validators from headers
-				// 찾아낸 과거 헤더의 extraData에서 검증자 목록 정보를 추출(Parsing)
+				// Checkpoint 헤더의 ExtraData를 해석해 현재 검증자 주소 목록과(필요 시) 각 주소의 BLS 투표키를 추출해서 반환
 				validators, voteAddrs, err := parseValidators(checkpoint, p.chainConfig, epochLength)
 				if err != nil {
 					return nil, err
@@ -1078,10 +1086,12 @@ func (p *Parlia) assembleVoteAttestation(chain consensus.ChainHeaderReader, head
 	if parent == nil {
 		return errors.New("parent not found")
 	}
+	// 조부모 블록을 기준의 snapshot
 	snap, err := p.snapshot(chain, parent.Number.Uint64()-1, parent.ParentHash, nil)
 	if err != nil {
 		return err
 	}
+	// 모든 투표의 개수를 가지고 옴
 	votes := p.VotePool.FetchVoteByBlockHash(parent.Hash())
 	if len(votes) < cmath.CeilDiv(len(snap.Validators)*2, 3) {
 		return nil
@@ -1198,6 +1208,7 @@ func (p *Parlia) Prepare(chain consensus.ChainHeaderReader, header *types.Header
 	// 28bytes까지 슬라이싱
 	header.Extra = header.Extra[:extraVanity-nextForkHashSize]
 	// ForkID 핸드셰이크 구현부. 어느 하드포크까지 반영했는지”를 8 바이트(ID = 4 B hash + 4 B next) 로 교환해 체인이 엇갈린 피어를 사전에 거른다
+	// 모든 과거 하드포크들의 이력과 다음에 예정된 하드포크 정보가 저장됨
 	nextForkHash := forkid.NextForkHash(p.chainConfig, p.genesisHash, chain.GenesisHeader().Time, number, header.Time)
 	// nextForHash를 header Extra 마지막에 추가
 	header.Extra = append(header.Extra, nextForkHash[:]...)
@@ -1209,8 +1220,7 @@ func (p *Parlia) Prepare(chain consensus.ChainHeaderReader, header *types.Header
 	if err := p.prepareTurnLength(chain, header); err != nil {
 		return err
 	}
-	// add extra seal space
-	//																									65
+	// add extra seal space																							65
 	header.Extra = append(header.Extra, make([]byte, extraSeal)...)
 
 	return nil
@@ -1290,10 +1300,12 @@ func (p *Parlia) verifyTurnLength(chain consensus.ChainHeaderReader, header *typ
 }
 
 // 네트워크의 보안과 안정성(완결성)에 기여한 검증자들에게 프로토콜이 직접 추가 보상
+// 200 블록 주기로 보상
 func (p *Parlia) distributeFinalityReward(chain consensus.ChainHeaderReader, state vm.StateDB, header *types.Header,
 	cx core.ChainContext, txs *[]*types.Transaction, receipts *[]*types.Receipt, systemTxs *[]*types.Transaction,
 	usedGas *uint64, mining bool, tracer *tracing.Hooks) error {
 	currentHeight := header.Number.Uint64()
+	// finalityRewardInterval = 200
 	if currentHeight%finalityRewardInterval != 0 {
 		return nil
 	}
@@ -1305,6 +1317,7 @@ func (p *Parlia) distributeFinalityReward(chain consensus.ChainHeaderReader, sta
 		if head == nil {
 			return fmt.Errorf("header is nil at height %d", height)
 		}
+		// 500
 		epochLength, err := p.epochLength(chain, head, nil)
 		if err != nil {
 			return err
@@ -1538,6 +1551,7 @@ func (p *Parlia) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *
 	systemcontracts.TryUpdateBuildInSystemContract(p.chainConfig, header.Number, parent.Time, header.Time, state, false)
 
 	if p.chainConfig.IsOnFeynman(header.Number, parent.Time, header.Time) {
+		// 현재 블록이 Feynman 하드포크 시점이면 System Contract 초기화
 		err := p.initializeFeynmanContract(state, header, cx, &body.Transactions, &receipts, nil, &header.GasUsed, true, tracer)
 		if err != nil {
 			log.Error("init feynman contract failed", "error", err)
@@ -1570,6 +1584,7 @@ func (p *Parlia) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *
 				}
 			}
 		}
+		// 이번 블록 생성 시점에 in turn validator가 서명을 안 하는데 최근에도 안했다면 slash
 		if !signedRecently {
 			err = p.slash(spoiledVal, state, header, cx, &body.Transactions, &receipts, nil, &header.GasUsed, true, tracer)
 			if err != nil {
@@ -1578,8 +1593,7 @@ func (p *Parlia) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *
 			}
 		}
 	}
-
-	// 가스비 금고에서 수수료를 검증자에게 분배
+	// 블록 검증 차례 validator엑세 보상을 분배
 	err := p.distributeIncoming(p.val, state, header, cx, &body.Transactions, &receipts, nil, &header.GasUsed, true, tracer)
 	if err != nil {
 		return nil, nil, err
@@ -2016,6 +2030,7 @@ func (p *Parlia) distributeIncoming(val common.Address, state vm.StateDB, header
 		if rewards.Cmp(common.U2560) > 0 {
 			state.SetBalance(consensus.SystemAddress, balance.Sub(balance, rewards), tracing.BalanceChangeUnspecified)
 			state.AddBalance(coinbase, rewards, tracing.BalanceChangeUnspecified)
+			// rewards의 1/16을 SystemRewardContract에 송금
 			err := p.distributeToSystem(rewards.ToBig(), state, header, chain, txs, receipts, receivedTxs, usedGas, mining, tracer)
 			if err != nil {
 				return err
@@ -2029,12 +2044,10 @@ func (p *Parlia) distributeIncoming(val common.Address, state vm.StateDB, header
 		return nil
 	}
 
-	// 금고를 깨끗하게 비웁니다.
 	state.SetBalance(consensus.SystemAddress, common.U2560, tracing.BalanceDecreaseBSCDistributeReward)
-	// 금고에 있던 '모든' 돈을 이번 블록을 생성한 검증자(coinbase)에게 더해줍니다.
 	state.AddBalance(coinbase, balance, tracing.BalanceIncreaseBSCDistributeReward)
 	log.Trace("distribute to validator contract", "block hash", header.Hash(), "amount", balance)
-	// 지급된 보상액을 최종 처리하는 함수를 호출합니다.
+	// rewards의 ValidatorContract 에게 송금
 	return p.distributeToValidator(balance.ToBig(), val, state, header, chain, txs, receipts, receivedTxs, usedGas, mining, tracer)
 }
 
@@ -2279,22 +2292,25 @@ func (p *Parlia) GetFinalizedHeader(chain consensus.ChainHeaderReader, header *t
 
 // ===========================     utility function        ==========================
 func (p *Parlia) backOffTime(snap *Snapshot, parent, header *types.Header, val common.Address) uint64 {
+	// in-turn일 때 backOffTime = 0
 	if snap.inturn(val) {
 		log.Debug("backOffTime", "blockNumber", header.Number, "in turn validator", val)
 		return 0
 	} else {
-		delay := defaultInitialBackOffTime
+		delay := defaultInitialBackOffTime // 1000 ms
 		// When mining blocks, `header.Time` is temporarily set to time.Now() + 1.
 		// Therefore, using `header.Time` to determine whether a hard fork has occurred is incorrect.
 		// As a result, during the Bohr and Lorentz hard forks, the network may experience some instability,
 		// So use `parent.Time` instead.
+		// Lorentz 하드포크 이후인지 확인
 		isParerntLorentz := p.chainConfig.IsLorentz(parent.Number, parent.Time)
 		if isParerntLorentz {
 			// If the in-turn validator has not signed recently, the expected backoff times are [2, 3, 4, ...].
-			delay = lorentzInitialBackOffTime
+			delay = lorentzInitialBackOffTime // 2000ms
 		}
 		validators := snap.validators()
 		if p.chainConfig.IsPlanck(header.Number) {
+			// recents를 조회해서 각 validator가 몇 번 검증에 참여했는지 계산하여 counts에 저장
 			counts := snap.countRecents()
 			for addr, seenTimes := range counts {
 				log.Trace("backOffTime", "blockNumber", header.Number, "validator", addr, "seenTimes", seenTimes)
