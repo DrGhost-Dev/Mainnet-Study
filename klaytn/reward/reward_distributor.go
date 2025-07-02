@@ -371,28 +371,40 @@ func CalcDeferredReward(header *types.Header, txs []*types.Transaction, receipts
 		CalcDeferredRewardTimer = time.Since(start)
 	}(time.Now())
 
+	// 보상 계산에 필요한 모든 설정과 데이터를 `RewardConfig`로 준비
 	rc, err := NewRewardConfig(header, txs, receipts, rules, pset)
 	if err != nil {
 		return nil, err
 	}
 
 	var (
-		minted      = rc.mintingAmount
+		// 이번 블록에서 새롭게 발행된 코인
+		minted = rc.mintingAmount
+		// 스테이킹 정보 (KIF, KEF 주소 등)
 		stakingInfo = GetStakingInfo(header.Number.Uint64())
 	)
 
+	// 수수료 계산: 전체 수수료를 '보상용 수수료'와 '소각용 수수료'로 분리
 	totalFee, rewardFee, burntFee := calcDeferredFee(rc)
+	// 1차 분배: (발행된 코인 + 보상용 수수료)를 4개의 주체에게 분배
+	// Proposer(제안자), Stakers(스테이커 그룹), KIF(개선기금), KEF(생태계기금)
 	proposer, stakers, kif, kef, splitRem := calcSplit(rc, minted, rewardFee)
+	// 2차 분배: Stakers 몫을 개별 스테이커들에게 지분율에 따라 분배
 	shares, shareRem := calcShares(stakingInfo, stakers, rc.minimumStake.Uint64())
 
 	// Remainder from (CN, KIF, KEF) split goes to KIF
+	// 자투리 금액(Remainder) 처리
+	// 1차 분배의 자투리는 KIF에게
 	kif = kif.Add(kif, splitRem)
 	// Remainder from staker shares goes to Proposer
 	// Then, deduct it from stakers so that `minted + totalFee - burntFee = proposer + stakers + kif + kef`
+	// 2차 분배의 자투리는 Proposer에게
 	proposer = proposer.Add(proposer, shareRem)
+	// Proposer에게 줬으니 Stakers 총액에선 차감
 	stakers = stakers.Sub(stakers, shareRem)
 
 	// if KIF or KEF is not set, proposer gets the portion
+	// KIF, KEF 주소가 설정되지 않은 경우, 해당 몫은 Proposer에게
 	if stakingInfo == nil || common.EmptyAddress(stakingInfo.KIFAddr) {
 		logger.Debug("KIF empty, proposer gets its portion", "kif", kif)
 		proposer = proposer.Add(proposer, kif)
@@ -404,6 +416,7 @@ func CalcDeferredReward(header *types.Header, txs []*types.Transaction, receipts
 		kef = big.NewInt(0)
 	}
 
+	// 최종 결과를 RewardSpec 구조체에 정리
 	spec := NewRewardSpec()
 	spec.Minted = minted
 	spec.TotalFee = totalFee
@@ -413,6 +426,7 @@ func CalcDeferredReward(header *types.Header, txs []*types.Transaction, receipts
 	spec.KIF = kif
 	spec.KEF = kef
 
+	// 주소별 보상 금액을 맵(Map) 형태로 변환하여 반환
 	incrementRewardsMap(spec.Rewards, header.Rewardbase, proposer)
 
 	if stakingInfo != nil && !common.EmptyAddress(stakingInfo.KIFAddr) {

@@ -216,7 +216,6 @@ func (c *core) startNewRound(round *big.Int) {
 	} else {
 		logger = c.logger.NewWith("old_round", c.current.Round(), "old_seq", c.current.Sequence())
 	}
-
 	roundChange := false
 	// Try to get last proposal
 	// blockHeader, signer를 가지고 옴
@@ -227,15 +226,25 @@ func (c *core) startNewRound(round *big.Int) {
 	if c.current == nil {
 		logger.Trace("Start to the initial round")
 	} else if lastProposal.Number().Cmp(c.current.Sequence()) >= 0 {
+		// --- 뒤처진(Lagging) 상태인가? (따라잡기, Catch-up) ---
+		// lastProposal: 내 노드가 알고 있는 가장 최신 블록
+		// c.current.Sequence(): 내 합의 엔진이 지금 만들려고 하는 블록의 높이
+		// 최신 블록 높이가 내가 만들려는 블록 높이보다 크거나 같다면,
+		// 다른 노드들이 이미 블록을 만들고 앞서나갔다는 의미입니다.
 		diff := new(big.Int).Sub(lastProposal.Number(), c.current.Sequence())
+		// sequenceMeter: 블록 높이가 얼마나 점프했는지 성능 지표(metric)를 기록합니다.
 		c.sequenceMeter.Mark(new(big.Int).Add(diff, common.Big1).Int64())
 
+		// 만약 이전 합의가 진행 중이었다면, 얼마나 시간이 걸렸는지 기록하고 타이머를 초기화합니다.
 		if !c.consensusTimestamp.IsZero() {
 			c.consensusTimeGauge.Update(int64(time.Since(c.consensusTimestamp)))
 			c.consensusTimestamp = time.Time{}
 		}
 		logger.Trace("Catch up latest proposal", "number", lastProposal.Number().Uint64(), "hash", lastProposal.Hash())
 	} else if lastProposal.Number().Cmp(big.NewInt(c.current.Sequence().Int64()-1)) == 0 {
+		// --- 정상(Normal) 또는 재시도(Round Change) 상태인가? ---
+		// 내가 만들려는 블록 높이(c.current.Sequence())가 최신 블록 높이보다 정확히 1만큼 큰 경우.
+		// 즉, 네트워크와 동기화가 잘 되어 있고, 다음 블록을 만들 준비가 된 정상적인 상태입니다.
 		if round.Cmp(common.Big0) == 0 {
 			// same seq and round, don't need to start new round
 			return
@@ -243,15 +252,18 @@ func (c *core) startNewRound(round *big.Int) {
 			logger.Warn("New round should not be smaller than current round", "seq", lastProposal.Number().Int64(), "new_round", round, "old_round", c.current.Round())
 			return
 		}
+		// 위의 두 조건에 해당하지 않는다면, 이는 합의 실패로 인해
+		// 같은 블록 높이에서 다음 라운드로 넘어가는 '재시도' 상황임을 의미합니다.
+		// roundChange 플래그를 true로 설정하여 뒷부분 로직이 이를 인지하도록 합니다.
 		roundChange = true
 	} else {
 		logger.Warn("New sequence should be larger than current sequence", "new_seq", lastProposal.Number().Int64())
 		return
 	}
-	//}
 
 	var newView *istanbul.View
 	if roundChange {
+		// 라운드만 증가
 		newView = &istanbul.View{
 			Sequence: new(big.Int).Set(c.current.Sequence()),
 			Round:    new(big.Int).Set(round),
@@ -259,15 +271,18 @@ func (c *core) startNewRound(round *big.Int) {
 	} else {
 		newView = &istanbul.View{
 			Sequence: new(big.Int).Add(lastProposal.Number(), common.Big1),
-			Round:    new(big.Int),
+			Round:    new(big.Int), // 라운드는 0으로 초기화
 		}
+		// 해당 블록 높이에 맞는 검증자 집합(CN 그룹)을 가져옴
 		c.valSet = c.backend.Validators(lastProposal)
-
+		// 전체 합의 노드(CN)의 총 수를 계산
 		councilSize := int64(c.valSet.Size())
+		// 이번 라운드에 실제 블록 검증에 참여할 '위원회'의 크기를 계산
 		committeeSize := int64(c.valSet.SubGroupSize())
 		if committeeSize > councilSize {
 			committeeSize = councilSize
 		}
+		// 계산된 전체 CN 수와 위원회 수를 모니터링 시스템의 게이지에 업데이트
 		c.councilSizeGauge.Update(councilSize)
 		c.committeeSizeGauge.Update(committeeSize)
 	}
@@ -276,25 +291,41 @@ func (c *core) startNewRound(round *big.Int) {
 	// Update logger
 	logger = logger.NewWith("old_proposer", c.valSet.GetProposer())
 	// Clear invalid ROUND CHANGE messages
+	// 라운드 변경 메시지 수집함 초기화
+	// 합의 실패 시 다른 노드로부터 받는 '라운드 변경(ROUND CHANGE)' 메시지를 수집하는 공간을 새로 만듭니다.
+	// 이전 라운드의 낡은 메시지들은 모두 비워집니다.
 	c.roundChangeSet = newRoundChangeSet(c.valSet)
 	// New snapshot for new round
+	// 현재 라운드 상태 객체 생성
+	// 이번 라운드(newView)의 모든 상태(검증자 목록, 잠긴 블록 등)를 관리할 새로운 roundState 객체를 생성합니다.
 	c.updateRoundState(newView, c.valSet, roundChange)
 	// Calculate new proposer
+	// 새로운 제안자 계산 (가장 핵심적인 부분)
+	// 이전 제안자(lastProposer)와 새로운 라운드 번호(newView.Round)를 기반으로,
+	// 이번 라운드를 이끌어갈 새로운 제안자를 수학적 알고리즘에 따라 계산하고 결정합니다.
 	c.valSet.CalcProposer(lastProposer, newView.Round.Uint64())
 	c.waitingForRoundChange = false
 	c.setState(StateAcceptRequest)
+	// 이 조건문은 '합의 실패로 인한 재시도 라운드(roundChange=true)'이고, '내가 바로 그 새로운 제안자(c.isProposer())'일 때만 실행됩니다.
 	if roundChange && c.isProposer() && c.current != nil {
 		// If it is locked, propose the old proposal
 		// If we have pending request, propose pending request
 		if c.current.IsHashLocked() {
+			// 일관성을 위해 반드시 이전에 지지했던 바로 그 블록(locked proposal)을 다시 제안해야 합니다.
 			r := &istanbul.Request{
 				Proposal: c.current.Proposal(), // c.current.Proposal would be the locked proposal by previous proposer, see updateRoundState
 			}
-			c.sendPreprepare(r)
+			c.sendPreprepare(r) // 잠겨있던 블록을 담아 PRE-PREPARE 메시지 전송
+			// 잠겨있지는 않지만, 처리 대기 중인 트랜잭션 요청이 있다면,
 		} else if c.current.pendingRequest != nil {
+			// 그 요청을 담아 새로운 블록을 제안합니다.
 			c.sendPreprepare(c.current.pendingRequest)
 		}
 	}
+	// 타임아웃 타이머 시작
+	// 새로운 라운드 변경 타이머를 시작합니다.
+	// 만약 이번에 선출된 제안자가 일정 시간 안에 블록을 제안하지 않으면(PRE-PREPARE 메시지를 보내지 않으면),
+	// 이 타이머가 만료되어 합의가 또 실패했다고 판단하고 다음 라운드로 넘어가는 절차를 시작합니다.
 	c.newRoundChangeTimer()
 
 	logger.Debug("New round", "new_round", newView.Round, "new_seq", newView.Sequence, "new_proposer", c.valSet.GetProposer(), "isProposer", c.isProposer())

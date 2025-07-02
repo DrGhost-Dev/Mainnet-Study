@@ -44,18 +44,29 @@ const (
 
 // Snapshot is the state of the authorization voting at a given point in time.
 type Snapshot struct {
-	Epoch         uint64                // The number of blocks after which to checkpoint and reset the pending votes
-	Number        uint64                // Block number where the snapshot was created
-	Hash          common.Hash           // Block hash where the snapshot was created
-	ValSet        istanbul.ValidatorSet // Set of authorized validators at this moment
-	Policy        uint64
+	Epoch uint64 // The number of blocks after which to checkpoint and reset the pending votes
+	// 이 스냅샷이 생성된 시점의 블록 번호
+	Number uint64 // Block number where the snapshot was created
+	// 스냅샷이 생성된 시점의 블록해시 값
+	Hash common.Hash // Block hash where the snapshot was created
+	// 모든 CN(검증자)의 정보와 상태를 담고 있는 객체
+	ValSet istanbul.ValidatorSet // Set of authorized validators at this moment
+	// 제안자(Proposer) 선출에 사용되는 정책
+	//	0: RoundRobin
+	//	1: Sticky
+	//	2: WeightedRandom
+	Policy uint64
+	// 위원회 크기
 	CommitteeSize uint64
-	Votes         []governance.GovernanceVote      // List of votes cast in chronological order
-	Tally         []governance.GovernanceTallyItem // Current vote tally to avoid recalculating
+	// 시간순으로 기록된 개별 거버넌스 투표 목록
+	Votes []governance.GovernanceVote // List of votes cast in chronological order
+	// 현재 투표 집계 현황
+	Tally []governance.GovernanceTallyItem // Current vote tally to avoid recalculating
 }
 
 func effectiveParams(gov governance.Engine, number uint64) (epoch uint64, policy uint64, committeeSize uint64) {
-	pset, err := gov.EffectiveParams(number)
+	// number = current block Number
+	pset, err := gov.EffectiveParams(number) // governance/default.go
 	if err != nil {
 		// TODO-Kaia-Kore: remove err condition
 		logger.Error("Couldn't get governance value. Resorting to defaults", "err", err)

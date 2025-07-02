@@ -1253,7 +1253,8 @@ func (gov *Governance) EffectiveParams(num uint64) (*params.GovParamSet, error) 
 	}
 	// Should be equivalent to Governance.ReadGovernance(), but without in-memory caches.
 	// Not using in-memory caches to make it stateless, hence less error-prone.
-	_, strMap, err := gov.db.ReadGovernanceAtNumber(num, epoch)
+	// strMap은 governance Infomation
+	_, strMap, err := gov.db.ReadGovernanceAtNumber(num, epoch) // storage/database/db_manager.db
 	if err != nil {
 		logger.Error("ReadGovernanceAtNumber failed", "num", num, "err", err)
 		return nil, err

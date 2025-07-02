@@ -126,22 +126,29 @@ func (p *ChainBlsPubkeyProvider) ResetBlsCache() {
 
 // Calculate KIP-114 Randao header fields
 // https://github.com/klaytn/kips/blob/kip114/KIPs/kip-114.md
+// KIP-114 제안에 따라 클레이튼 블록체인에 온체인 난수(On-chain Randomness)를 생성하는 기능의 일부입니다.
+// 이더리움의 Randao 메커니즘과 유사하며, 블록 생성자가 예측하거나 조작하기 어려운 난수를 블록 헤더에 포함시키기 위해 사용
 func (sb *backend) CalcRandao(number *big.Int, prevMixHash []byte) ([]byte, []byte, error) {
+	// BLS 개인키 확인
 	if sb.blsSecretKey == nil {
 		return nil, nil, errNoBlsKey
 	}
+	// mixHash 유효성 검사
 	if len(prevMixHash) != 32 {
 		logger.Error("invalid prevMixHash", "number", number.Uint64(), "prevMixHash", hexutil.Encode(prevMixHash))
 		return nil, nil, errInvalidRandaoFields
 	}
 
 	// block_num_to_bytes() = num.to_bytes(32, byteorder="big")
+	// 서명할 메시지 생성
 	msg := calcRandaoMsg(number)
 
 	// calc_random_reveal() = sign(privateKey, headerNumber)
+	// 난수 공개 값 계산
 	randomReveal := bls.Sign(sb.blsSecretKey, msg[:]).Marshal()
 
 	// calc_mix_hash() = xor(prevMixHash, keccak256(randomReveal))
+	// 새로운 mixHash 계산
 	mixHash := calcMixHash(randomReveal, prevMixHash)
 
 	return randomReveal, mixHash, nil

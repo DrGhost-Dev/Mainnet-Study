@@ -92,12 +92,15 @@ func ConvertHashToSeed(hash common.Hash) (int64, error) {
 // It returns nil if the given committeeSize is bigger than validatorSize or proposer indexes are invalid.
 func SelectRandomCommittee(validators []istanbul.Validator, committeeSize uint64, seed int64, proposerIdx int, nextProposerIdx int) []istanbul.Validator {
 	// ensure validator indexes are valid
+	// --- 입력값 유효성 검사 (안전장치) ---
+	// 제안자와 다음 제안자의 인덱스가 유효한지, 서로 다른지 확인합니다.
 	if proposerIdx < 0 || nextProposerIdx < 0 || proposerIdx == nextProposerIdx {
 		logger.Error("invalid indexes of validators", "proposerIdx", proposerIdx, "nextProposerIdx", nextProposerIdx)
 		return nil
 	}
 
 	// ensure committeeSize and proposer indexes are valid
+	// 위원회 크기가 전체 검증자 수보다 작고, 인덱스가 범위를 벗어나지 않는지 확인합니다.
 	validatorSize := len(validators)
 	if validatorSize < int(committeeSize) || validatorSize <= proposerIdx || validatorSize <= nextProposerIdx {
 		logger.Error("invalid committee size or validator indexes", "validatorSize", validatorSize,
@@ -106,6 +109,7 @@ func SelectRandomCommittee(validators []istanbul.Validator, committeeSize uint64
 	}
 
 	// it cannot be happened. just to make sure
+	// 위원회 크기가 2보다 작은 극단적인 경우를 처리합니다.
 	if committeeSize < 2 {
 		if committeeSize == 0 {
 			logger.Error("committee size has an invalid value", "committeeSize", committeeSize)

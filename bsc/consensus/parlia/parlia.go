@@ -1205,9 +1205,9 @@ func (p *Parlia) Prepare(chain consensus.ChainHeaderReader, header *types.Header
 		header.MixDigest = common.Hash{}
 	}
 
-	// 28bytes까지 슬라이싱
+	// 28bytes까지 슬라이싱                            4B
 	header.Extra = header.Extra[:extraVanity-nextForkHashSize]
-	// ForkID 핸드셰이크 구현부. 어느 하드포크까지 반영했는지”를 8 바이트(ID = 4 B hash + 4 B next) 로 교환해 체인이 엇갈린 피어를 사전에 거른다
+	// ForkID 핸드셰이크 구현부. 어느 하드포크까지 반영했는지”를 4B로 리턴
 	// 모든 과거 하드포크들의 이력과 다음에 예정된 하드포크 정보가 저장됨
 	nextForkHash := forkid.NextForkHash(p.chainConfig, p.genesisHash, chain.GenesisHeader().Time, number, header.Time)
 	// nextForHash를 header Extra 마지막에 추가
