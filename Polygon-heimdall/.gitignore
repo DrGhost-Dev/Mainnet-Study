@@ -1,0 +1,25 @@
+.DS_Store
+
+helper/heimdall-params.go
+
+# ignore vendor
+vendor/
+vendor/github.com/ethereum/go-ethereum
+vendor/github.com/tendermint/iavl
+
+# ignore build
+build
+logs
+*.log
+
+.idea
+.vscode
+
+data/
+dist/
+
+.dccache
+.idea/
+.idea*
+
+cover.out

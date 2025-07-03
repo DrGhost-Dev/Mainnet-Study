@@ -1,0 +1,38 @@
+devnetType: docker
+
+defaultFee: 2000
+defaultStake: 10000
+
+borChainId: 15001
+heimdallChainId: heimdall-15001
+
+borDockerBuildContext: '../../bor'
+heimdallDockerBuildContext: 'https://github.com/maticnetwork/heimdall.git#develop'
+
+genesisContractsBranch: master
+contractsRepo: https://github.com/0xPolygon/pos-contracts.git
+contractsBranch: anvil-pos
+
+blockTime:
+  - '2'
+blockNumber:
+  - '0'
+
+sprintSize:
+  - '64'
+sprintSizeBlockNumber:
+  - '0'
+
+numOfBorValidators: 3
+numOfBorSentries: 0
+numOfBorArchiveNodes: 0
+
+devnetBorFlags: config,config,config
+
+numOfErigonValidators: 0
+numOfErigonSentries: 0
+numOfErigonArchiveNodes: 0
+
+ethURL: http://anvil:9545
+ethHostUser: ubuntu
+mnemonic: 'clock radar mass judge dismiss just intact mind resemble fringe diary casino'
