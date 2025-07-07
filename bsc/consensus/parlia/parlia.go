@@ -1195,7 +1195,7 @@ func (p *Parlia) Prepare(chain consensus.ChainHeaderReader, header *types.Header
 	if parent == nil {
 		return consensus.ErrUnknownAncestor
 	}
-	// blockTime = 3000
+
 	blockTime := p.blockTimeForRamanujanFork(snap, header, parent)
 	header.Time = blockTime / 1000 // get seconds
 	if p.chainConfig.IsLorentz(header.Number, header.Time) {

@@ -511,6 +511,7 @@ func (cp *CheckpointProcessor) createAndSendCheckpointToHeimdall(checkpointConte
 func (cp *CheckpointProcessor) createAndSendCheckpointToRootchain(checkpointContext *CheckpointContext, start uint64, end uint64, height int64, txHash []byte) error {
 	cp.Logger.Info("Preparing checkpoint to be pushed on chain", "height", height, "txHash", hmTypes.BytesToHeimdallHash(txHash), "start", start, "end", end)
 	// proof
+	// 체크포인트 트랜잭션이 Heimdall에 존재하는지 체크
 	tx, err := helper.QueryTxWithProof(cp.cliCtx, txHash)
 	if err != nil {
 		cp.Logger.Error("Error querying checkpoint tx proof", "txHash", txHash)
@@ -519,7 +520,7 @@ func (cp *CheckpointProcessor) createAndSendCheckpointToRootchain(checkpointCont
 
 	// fetch side txs sigs
 	decoder := helper.GetTxDecoder(authTypes.ModuleCdc)
-
+	// 트랜잭션 데이터를 디코딩하여 원래의 메시지 형태로 복원합니다.
 	stdTx, err := decoder(tx.Tx)
 	if err != nil {
 		cp.Logger.Error("Error while decoding checkpoint tx", "txHash", tx.Tx.Hash(), "error", err)
@@ -527,7 +528,6 @@ func (cp *CheckpointProcessor) createAndSendCheckpointToRootchain(checkpointCont
 	}
 
 	cmsg := stdTx.GetMsgs()[0]
-
 	sideMsg, ok := cmsg.(hmTypes.SideTxMsg)
 	if !ok {
 		cp.Logger.Error("Invalid side-tx msg", "txHash", tx.Tx.Hash())
@@ -535,15 +535,17 @@ func (cp *CheckpointProcessor) createAndSendCheckpointToRootchain(checkpointCont
 	}
 
 	// side-tx data
+	// 서명에 사용된 원본 데이터를 가져옵니다.
 	sideTxData := sideMsg.GetSideSignBytes()
 
 	// get sigs
+	// 체크포인트에 서명한 서명 목록을 가져옴
 	sigs, err := helper.FetchSideTxSigs(cp.httpClient, height, tx.Tx.Hash(), sideTxData)
 	if err != nil {
 		cp.Logger.Error("Error fetching votes for checkpoint tx", "height", height)
 		return err
 	}
-
+	// 다른 검증인이 먼저 제출하지는 않았는지 마지막으로 확인
 	shouldSend, err := cp.shouldSendCheckpoint(checkpointContext, start, end)
 	if err != nil {
 		return err
