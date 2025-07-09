@@ -201,9 +201,11 @@ func (k *Keeper) GetTotalPower(ctx sdk.Context) (totalPower int64) {
 // GetSpanEligibleValidators returns current validators who are not getting deactivated in between next span
 func (k *Keeper) GetSpanEligibleValidators(ctx sdk.Context) (validators []hmTypes.Validator) {
 	// get ack count
+	// 체크포인트(Checkpoint)가 이더리움에 제출되고 승인(ACK)된 횟수
 	ackCount := k.moduleCommunicator.GetACKCount(ctx)
 
 	// Get validators and iterate through validator list
+	// 데이터베이스에 등록된 모든 검증자 목록을 하나씩 꺼내어 아래의 필터링 함수를 적용
 	k.IterateValidatorsAndApplyFn(ctx, func(validator hmTypes.Validator) error {
 		// check if validator is valid for current epoch and endEpoch is not set.
 		if validator.EndEpoch == 0 && validator.IsCurrentValidator(ackCount) {

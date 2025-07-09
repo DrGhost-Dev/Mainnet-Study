@@ -49,6 +49,7 @@ func NewPostTxHandler(k Keeper, contractCaller helper.IContractCaller) hmTypes.P
 }
 
 // SideHandleMsgSpan validates external calls required for processing proposed span
+// 새로운 스팬(Span) 제안이 유효한지 외부 데이터를 기준으로 검증(Validate)하는 핵심적인 역할
 func SideHandleMsgSpan(ctx sdk.Context, k Keeper, msg sdk.Msg, contractCaller helper.IContractCaller) (result abci.ResponseDeliverSideTx) {
 	var proposeMsg types.MsgProposeSpanV2
 	switch msg := msg.(type) {
@@ -78,6 +79,7 @@ func SideHandleMsgSpan(ctx sdk.Context, k Keeper, msg sdk.Msg, contractCaller he
 	)
 
 	// calculate next span seed locally
+	// Bor 체인의 특정 블록 해시값을 사용하여 NextSpanSeed를 구함
 	seed, seedAuthor, err := k.GetNextSpanSeed(ctx, proposeMsg.ID)
 	if err != nil {
 		k.Logger(ctx).Error("Error fetching next span seed from mainchain")
@@ -85,6 +87,7 @@ func SideHandleMsgSpan(ctx sdk.Context, k Keeper, msg sdk.Msg, contractCaller he
 	}
 
 	// check if span seed matches or not.
+	// 시드가 같은지 확인
 	if !bytes.Equal(proposeMsg.Seed.Bytes(), seed.Bytes()) {
 		k.Logger(ctx).Error(
 			"Span Seed does not match",
@@ -115,12 +118,14 @@ func SideHandleMsgSpan(ctx sdk.Context, k Keeper, msg sdk.Msg, contractCaller he
 	}
 
 	// fetch current child block
+	// Bor체인의 최신 블록 번호를 가지고 옴
 	childBlock, err := contractCaller.GetMaticChainBlock(nil)
 	if err != nil {
 		k.Logger(ctx).Error("Error fetching current child block", "error", err)
 		return hmCommon.ErrorSideTx(k.Codespace(), common.CodeInvalidMsg)
 	}
 
+	// 최신 Span을 가지고 와서 연속성 검증
 	lastSpan, err := k.GetLastSpan(ctx)
 	if err != nil {
 		k.Logger(ctx).Error("Error fetching last span", "error", err)

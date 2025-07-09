@@ -148,11 +148,13 @@ func (bl *BaseListener) String() string {
 }
 
 // StartHeaderProcess starts header process when they get new header
+// 새로운 헤더를 받았을 때 헤더 처리 프로세스를 시작합니다.
 func (bl *BaseListener) StartHeaderProcess(ctx context.Context) {
 	bl.Logger.Info("Starting header process")
 
 	for {
 		select {
+		// StartPolling 함수가 보낸 새로운 블록 헤더 정보가 HeaderChannel이라는 통신 채널에 도착할 때까지 기다립니다.
 		case newHeader := <-bl.HeaderChannel:
 			bl.impl.ProcessHeader(newHeader)
 		case <-ctx.Done():
@@ -165,15 +167,18 @@ func (bl *BaseListener) StartHeaderProcess(ctx context.Context) {
 // StartPolling starts polling
 func (bl *BaseListener) StartPolling(ctx context.Context, pollInterval time.Duration, number *big.Int) {
 	// How often to fire the passed in function in second
+	// 주기적으로 작업을 실행할 간격을 설정
 	interval := pollInterval
 
 	// Setup the ticket and the channel to signal
 	// the ending of the interval
+	// 주기의 끝을 알리는 티켓과 채널을 설정
 	ticker := time.NewTicker(interval)
 
 	// start listening
 	for {
 		select {
+		// 위에서 만든 ticker 알람이 울리면(즉, 정해진 interval 시간이 지나면) 이 case 블록 안의 코드를 실행
 		case <-ticker.C:
 			var bHeader *blockHeader
 

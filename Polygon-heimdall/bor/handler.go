@@ -28,6 +28,7 @@ func NewHandler(k Keeper) sdk.Handler {
 
 // HandleMsgProposeSpan handles proposeSpan msg
 // HandleMsgProposeSpan 함수는 '스팬 제안' 메시지를 처리합니다.
+// 검증자가 보낸 새 Span 제안을 파싱·검증
 // ctx: 블록체인의 현재 상태(블록 높이, 시간 등) 정보
 // msg: 검증인(노드)이 보낸 '스팬 제안' 메시지
 // k:   블록체인 상태를 읽거나 쓸 수 있는 Keeper(관리자)

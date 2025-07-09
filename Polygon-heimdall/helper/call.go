@@ -480,12 +480,14 @@ func (c *ContractCaller) GetMainChainBlockTime(ctx context.Context, blockNum uin
 }
 
 // GetMaticChainBlock returns child chain block header
+// 보르(Bor) 체인에 접속하여, 특정 블록의 헤더(Header) 정보를 가져오는 역할
 func (c *ContractCaller) GetMaticChainBlock(blockNum *big.Int) (header *ethTypes.Header, err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), c.MaticChainTimeout)
 	defer cancel()
 
 	var latestBlock *ethTypes.Header
 
+	// MaticGrpcFlag가 true이면 더 현대적인 방식인 gRPC 를, false이면 일반적인 JSON-RPC 방식을 사용
 	if c.MaticGrpcFlag {
 		if blockNum == nil {
 			// LatestBlockNumber is BlockNumber(-2) in go-ethereum rpc

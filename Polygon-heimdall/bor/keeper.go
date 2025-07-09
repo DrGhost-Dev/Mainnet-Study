@@ -99,6 +99,7 @@ func (k *Keeper) SetContractCaller(contractCaller helper.IContractCaller) {
 func (k *Keeper) AddNewSpan(ctx sdk.Context, span hmTypes.Span) error {
 	store := ctx.KVStore(k.storeKey)
 
+	// span 객체를 바이트 형태로 변환
 	out, err := k.cdc.MarshalBinaryBare(span)
 	if err != nil {
 		k.Logger(ctx).Error("Error marshalling span", "error", err)
@@ -106,6 +107,7 @@ func (k *Keeper) AddNewSpan(ctx sdk.Context, span hmTypes.Span) error {
 	}
 
 	// store set span id
+	// 데이터 베이스에 저장
 	store.Set(GetSpanKey(span.ID), out)
 
 	// update last span
@@ -231,7 +233,7 @@ func (k *Keeper) FreezeSet(ctx sdk.Context, id uint64, startBlock uint64, endBlo
 		} else {
 			lastSpanId = id - 2
 		}
-
+		// 두 스팬 전(id-2)의 검증자 목록을 가져옵니다.
 		lastSpan, err = k.GetSpan(ctx, lastSpanId)
 		if err != nil {
 			return err
@@ -243,6 +245,7 @@ func (k *Keeper) FreezeSet(ctx sdk.Context, id uint64, startBlock uint64, endBlo
 		}
 
 		// select next producers
+		// seed와 이전 검증자 목록을 모두 사용하여 생산자를 선택합니다.
 		newProducers, err = k.SelectNextProducers(ctx, seed, prevVals)
 		if err != nil {
 			return err
@@ -271,6 +274,7 @@ func (k *Keeper) SelectNextProducers(ctx sdk.Context, seed common.Hash, prevVals
 	}
 
 	// spanEligibleVals are current validators who are not getting deactivated in between next span
+	// 활성가능한 validator 목록을 가져옴
 	spanEligibleVals := k.sk.GetSpanEligibleValidators(ctx)
 	producerCount := k.GetParams(ctx).ProducerCount
 
@@ -279,12 +283,14 @@ func (k *Keeper) SelectNextProducers(ctx sdk.Context, seed common.Hash, prevVals
 	}
 
 	// if producers to be selected is more than current validators no need to select/shuffle
+	// 시스템 설정에서 이번 스팬에 몇 명의 생산자를 뽑아야 하는지 확인
 	if len(spanEligibleVals) <= int(producerCount) {
 		return spanEligibleVals, nil
 	}
 
 	if len(prevVals) > 0 {
 		// rollback voting powers for the selection algorithm
+		// 검증자들의 투표 파워(스테이킹 지분)를 두 스팬 이전의 상태로 되돌립니다.
 		spanEligibleVals = rollbackVotingPowers(ctx, spanEligibleVals, prevVals)
 	}
 
@@ -322,6 +328,7 @@ func (k *Keeper) SelectNextProducers(ctx sdk.Context, seed common.Hash, prevVals
 }
 
 // UpdateLastSpan updates the last span start block
+// 최신 Span id값을 데이터 베이스에 저장
 func (k *Keeper) UpdateLastSpan(ctx sdk.Context, id uint64) {
 	store := ctx.KVStore(k.storeKey)
 	store.Set(LastSpanIDKey, []byte(strconv.FormatUint(id, 10)))
@@ -357,6 +364,7 @@ func (k *Keeper) GetLastEthBlock(ctx sdk.Context) *big.Int {
 	return lastEthBlock
 }
 
+// Bor 체인의 특정 블록 해시 값을 시드로 사용
 func (k *Keeper) GetNextSpanSeed(ctx sdk.Context, id uint64) (common.Hash, common.Address, error) {
 	var (
 		blockHeader *ethTypes.Header
@@ -590,6 +598,7 @@ func (k *Keeper) getBorBlockForSpanSeed(ctx sdk.Context, seedSpan *hmTypes.Span,
 }
 
 // rollbackVotingPowers rolls back voting powers of validators from a previous snapshot of validators
+// 두 Span전 검증자들의 voting power를 현재 검증자들에게 덮여씌움
 func rollbackVotingPowers(ctx sdk.Context, valsNew, valsOld []hmTypes.Validator) []hmTypes.Validator {
 	idToVP := make(map[uint64]int64)
 	for _, val := range valsOld {

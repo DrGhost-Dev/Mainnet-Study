@@ -87,6 +87,7 @@ func (sp *SpanProcessor) checkAndPropose() {
 		return
 	}
 
+	// Danelaw 하드포크 이후 인지 확인
 	if nodeStatus.SyncInfo.LatestBlockHeight >= helper.GetDanelawHeight() {
 		latestBlock, e := sp.contractConnector.GetMaticChainBlock(nil)
 		if e != nil {
@@ -94,6 +95,7 @@ func (sp *SpanProcessor) checkAndPropose() {
 			return
 		}
 
+		// Bor 노드의 최신 블록 번호가, 하임달에 이미 기록된 마지막 스팬의 시작 블록 번호보다도 작다면 에러
 		if latestBlock.Number.Uint64() < lastSpan.StartBlock {
 			sp.Logger.Debug("Current bor block is less than last span start block, skipping proposing span", "currentBlock", latestBlock.Number.Uint64(), "lastSpanStartBlock", lastSpan.StartBlock)
 			return
@@ -102,6 +104,7 @@ func (sp *SpanProcessor) checkAndPropose() {
 
 	sp.Logger.Debug("Found last span", "lastSpan", lastSpan.ID, "startBlock", lastSpan.StartBlock, "endBlock", lastSpan.EndBlock)
 
+	// 예상되는 다음 Span의 정보를 가지고 옴
 	nextSpanMsg, err := sp.fetchNextSpanDetails(lastSpan.ID+1, lastSpan.EndBlock+1)
 	if err != nil {
 		sp.Logger.Error("Unable to fetch next span details", "error", err, "lastSpanId", lastSpan.ID)
@@ -109,6 +112,7 @@ func (sp *SpanProcessor) checkAndPropose() {
 	}
 
 	// check if current user is among next span producers
+	// 다음 스팬의 예상 생산자 목록'에 나 자신의 노드 주소가 포함되어 있는지 확인
 	if sp.isSpanProposer(nextSpanMsg.SelectedProducers) {
 		go sp.propose(lastSpan, nextSpanMsg)
 	}
@@ -117,6 +121,7 @@ func (sp *SpanProcessor) checkAndPropose() {
 // propose producers for next span if needed
 func (sp *SpanProcessor) propose(lastSpan *types.Span, nextSpanMsg *types.Span) {
 	// call with last span on record + new span duration and see if it has been proposed
+	// currentBlock Bor의 현재 블록
 	currentBlock, err := sp.getCurrentChildBlock()
 	if err != nil {
 		sp.Logger.Error("Unable to fetch current block", "error", err)
@@ -266,7 +271,7 @@ func (sp *SpanProcessor) fetchNextSpanDetails(id uint64, start uint64) (*types.S
 // fetchNextSpanSeed - fetches seed for next span
 func (sp *SpanProcessor) fetchNextSpanSeed(id uint64) (common.Hash, common.Address, error) {
 	sp.Logger.Info("Sending Rest call to Get Seed for next span")
-
+	// HTTP 통신을 통해 하임달에게 시드를 요청
 	response, err := helper.FetchFromAPI(sp.cliCtx, helper.GetHeimdallServerEndpoint(fmt.Sprintf(util.NextSpanSeedURL, strconv.FormatUint(id, 10))))
 	if err != nil {
 		sp.Logger.Error("Error Fetching nextspanseed from HeimdallServer ", "error", err)

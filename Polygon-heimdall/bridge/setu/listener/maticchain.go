@@ -75,6 +75,7 @@ func (ml *MaticChainListener) sendTaskWithDelay(taskName string, headerBytes []b
 
 	ml.Logger.Debug("Sending task", "taskname", taskName, "currentTime", time.Now(), "delayTime", eta)
 
+	// 완성된 작업 지시서(signature)를 작업 큐(Queue) 시스템으로 보냅니다.
 	_, err := ml.queueConnector.Server.SendTask(signature)
 	if err != nil {
 		ml.Logger.Error("Error sending task", "taskName", taskName, "error", err)
