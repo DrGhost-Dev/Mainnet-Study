@@ -25,14 +25,15 @@ import (
 // TxBroadcaster uses to broadcast transaction to each chain
 type TxBroadcaster struct {
 	logger log.Logger
-
+	// 트랜잭션을 생성하고 전송하는 데 필요한 모든 클라이언트 측 정보와 도구를 담고 있는 객체
 	CliCtx cliContext.CLIContext
 
 	heimdallMutex sync.Mutex
 	maticMutex    sync.Mutex
-
+	// 이 노드가 마지막으로 성공적으로 전송한 트랜잭션의 시퀀스 번호
 	lastSeqNo uint64
-	accNum    uint64
+	// 트랜잭션을 보내는 이 노드의 고유한 계정 번호
+	accNum uint64
 }
 
 // NewTxBroadcaster creates new broadcaster
@@ -64,11 +65,13 @@ func (tb *TxBroadcaster) BroadcastToHeimdall(msg sdk.Msg, event interface{}, tes
 	defer util.LogElapsedTimeForStateSyncedEvent(event, "BroadcastToHeimdall", time.Now())
 
 	// tx encoder
+	// 트랜잭션을 바이트 배열로 변환하는 '인코딩 기능' 그 자체(함수)를 반환
 	txEncoder := helper.GetTxEncoder(tb.CliCtx.Codec)
 	// chain id
 	chainID := helper.GetGenesisDoc().ChainID
 
 	// get account number and sequence
+	// 필요한 정보들을(인코더, 계정/시퀀스 번호, 체인ID) 연속적으로 설정하여 트랜잭션을 만들 준비
 	txBldr := authTypes.NewTxBuilderFromCLI().
 		WithTxEncoder(txEncoder).
 		WithAccountNumber(tb.accNum).

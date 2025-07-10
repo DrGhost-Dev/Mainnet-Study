@@ -267,6 +267,7 @@ func DefaultTxDecoder(cdc *codec.Codec) sdk.TxDecoder {
 // DefaultTxEncoder logic for standard transaction encoding
 func DefaultTxEncoder(cdc *codec.Codec) sdk.TxEncoder {
 	return func(tx sdk.Tx) ([]byte, error) {
+		// 코덱(cdc)을 사용하여 트랜잭션(tx) 객체를 바이너리(binary) 형태로 변환(Marshal)하고, 그 데이터의 길이를 앞에 붙여주는(LengthPrefixed) 역할
 		return cdc.MarshalBinaryLengthPrefixed(tx)
 	}
 }

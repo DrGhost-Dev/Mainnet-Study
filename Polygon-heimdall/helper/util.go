@@ -815,6 +815,7 @@ func GetHeimdallServerEndpoint(endpoint string) string {
 
 // FetchFromAPI fetches data from any URL with limited read size
 func FetchFromAPI(cliCtx cliContext.CLIContext, URL string) (result rest.ResponseWithHeight, err error) {
+	// URL로 주소로 HTTP Get 요청을 함
 	resp, err := Client.Get(URL)
 	if err != nil {
 		return result, err
@@ -827,6 +828,7 @@ func FetchFromAPI(cliCtx cliContext.CLIContext, URL string) (result rest.Respons
 
 	// Handle the response
 	if resp.StatusCode == 200 {
+		// 요청을 받은 데이터를 읽음
 		body, err := io.ReadAll(limitedBody)
 		if err != nil {
 			return result, err
@@ -834,6 +836,7 @@ func FetchFromAPI(cliCtx cliContext.CLIContext, URL string) (result rest.Respons
 
 		// unmarshall data from buffer
 		var response rest.ResponseWithHeight
+		// JSON 데이터를 Go 객체로 해석
 		if err = cliCtx.Codec.UnmarshalJSON(body, &response); err != nil {
 			return result, err
 		}
