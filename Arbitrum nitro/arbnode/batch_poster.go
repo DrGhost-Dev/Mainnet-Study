@@ -1339,18 +1339,23 @@ const ethPosBlockTime = 12 * time.Second
 var errAttemptLockFailed = errors.New("failed to acquire lock; either another batch poster posted a batch or this node fell behind")
 
 func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error) {
+	// 이전에 보냈던 배치가 L1에서 실패(revert)했는지 확인
 	if b.batchReverted.Load() {
 		return false, fmt.Errorf("batch was reverted, not posting any more batches")
 	}
+	// L1에 트랜잭션을 보낼 때 사용할 다음 논스(nonce)를 가져옴
+	// 마지막으로 배치를 보냈던 지점의 메타데이터를 가져옴
 	nonce, batchPositionBytes, err := b.dataPoster.GetNextNonceAndMeta(ctx)
 	if err != nil {
 		return false, err
 	}
 	var batchPosition batchPosterPosition
+	// 가져온 메타데이터를 batchPosition으로 저장
 	if err := rlp.DecodeBytes(batchPositionBytes, &batchPosition); err != nil {
 		return false, fmt.Errorf("decoding batch position: %w", err)
 	}
 
+	// DB에서 batch개수를 가져옴
 	dbBatchCount, err := b.inbox.GetBatchCount()
 	if err != nil {
 		return false, err
@@ -1365,6 +1370,7 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 		}
 		var use4844 bool
 		config := b.config()
+		// EIP-4844를 지원하는지 설정 파일에서 blob을 허락했는지 Rollup인지 확인
 		if config.Post4844Blobs && b.dapWriter == nil && latestHeader.ExcessBlobGas != nil && latestHeader.BlobGasUsed != nil {
 			arbOSVersion, err := b.arbOSVersionGetter.ArbOSVersionForMessageIndex(arbutil.MessageIndex(arbmath.SaturatingUSub(uint64(batchPosition.MessageCount), 1)))
 			if err != nil {
@@ -1418,7 +1424,7 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 				}
 			}
 		}
-
+		// 새로우 segment를 만듦
 		segments, err := b.newBatchSegments(ctx, batchPosition.DelayedMessageCount, use4844)
 		if err != nil {
 			return false, err
@@ -1436,6 +1442,7 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 			}
 		}
 	}
+	// L2 체인에 새로 생성된 메시지가 있는지 확인
 	msgCount, err := b.streamer.GetMessageCount()
 	if err != nil {
 		return false, err
@@ -1646,6 +1653,7 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 		return false, nil
 	}
 
+	// 압축 스트림을 닫고, 최종적으로 압축된 배치 데이터(sequencerMsg)를 가져옴
 	sequencerMsg, err := b.building.segments.CloseAndGetBytes()
 	if err != nil {
 		return false, err
@@ -1724,7 +1732,7 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 			return false, fmt.Errorf("failed to generate delay proof: %w", err)
 		}
 	}
-
+	// 압축된 데이터와 기타 필요한 정보(시퀀스 번호 등)를 가지고 L1 스마트 컨트랙트를 호출할 때 필요한 트랜잭션 데이터(calldata)를 생성합니다. Blob으로 보낸다면 kzgBlobs도 함께 생성
 	data, kzgBlobs, err := b.encodeAddBatch(new(big.Int).SetUint64(batchPosition.NextSeqNum), prevMessageCount, b.building.msgCount, sequencerMsg, b.building.segments.delayedMsg, b.building.use4844, delayProof)
 	if err != nil {
 		return false, err
@@ -1756,6 +1764,7 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 		}
 
 		if useSimpleEstimation {
+			// 생성된 트랜잭션 데이터를 L1에 보내는 데 필요한 가스비(gasLimit)를 예측(estimate)
 			gasLimit, err = b.estimateGasSimple(ctx, data, kzgBlobs, accessList)
 		} else {
 			// When there are previous batches queued up in the dataPoster, we override the delayed message count in the sequencer inbox
@@ -1772,6 +1781,7 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 	if err != nil {
 		return false, err
 	}
+	// 다음 배치가 시작해야 할 위치를 나타내는 새로운 메타데이터(newMeta)를 준비
 	newMeta, err := rlp.EncodeToBytes(batchPosterPosition{
 		MessageCount:        b.building.msgCount,
 		DelayedMessageCount: b.building.segments.delayedMsg,

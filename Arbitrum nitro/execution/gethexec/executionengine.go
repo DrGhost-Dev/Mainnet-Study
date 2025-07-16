@@ -394,6 +394,7 @@ func MessageFromTxes(header *arbostypes.L1IncomingMessageHeader, txes types.Tran
 		l2Message = append(l2Message, arbos.L2MessageKind_SignedTx)
 		l2Message = append(l2Message, txBytes...)
 	} else {
+		// L2MessageKind_Batch는 태그 종류 중 하나
 		l2Message = append(l2Message, arbos.L2MessageKind_Batch)
 		sizeBuf := make([]byte, 8)
 		for i, tx := range txes {
@@ -568,8 +569,10 @@ func (s *ExecutionEngine) sequenceTransactionsWithBlockMutex(header *arbostypes.
 			return nil, err
 		}
 	}
+	// 트랜잭션 실행 중에 필요한 데이터를 디스크에서 미리 읽어와 메모리에 올려두는 **프리페처(Prefetcher)**를 작동시켜 성능을 향상시킴
 	statedb.StartPrefetcher("Sequencer", witness)
 	defer statedb.StopPrefetcher()
+	// 지연 메시지 누적 개수
 	delayedMessagesRead := lastBlockHeader.Nonce.Uint64()
 
 	startTime := time.Now()
@@ -598,6 +601,7 @@ func (s *ExecutionEngine) sequenceTransactionsWithBlockMutex(header *arbostypes.
 	}
 
 	allTxsErrored := true
+	// 실패된 일부 트랜잭션이 포함 가능
 	for _, err := range hooks.TxErrors {
 		if err == nil {
 			allTxsErrored = false

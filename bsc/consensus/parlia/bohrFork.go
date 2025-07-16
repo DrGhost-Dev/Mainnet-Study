@@ -86,7 +86,10 @@ func (p *Parlia) getTurnLengthFromContract(header *types.Header) (turnLength *bi
 // getRandTurnLength returns a random valid value, used to test switching turn length
 func (p *Parlia) getRandTurnLength(header *types.Header) (turnLength *big.Int, err error) {
 	turnLengths := [8]uint8{1, 3, 4, 5, 6, 7, 8, 9}
+	// 현재 블록 타임스탬프를 시드로 사용하여 랜덤 생성기를 만듦
 	r := mrand.New(mrand.NewSource(int64(header.Time)))
+	// 랜덤 생성기를 사용하여 0~7사이 숫자를 뽑음
 	lengthIndex := int(r.Int31n(int32(len(turnLengths))))
+	// 뽑은 숫자를 인덱스로 사용하여 2를 제외한 1 ~ 9 까지 배열에서 인덱스에 해당하는 숫자를 turnLength로 반환
 	return big.NewInt(int64(turnLengths[lengthIndex])), nil
 }

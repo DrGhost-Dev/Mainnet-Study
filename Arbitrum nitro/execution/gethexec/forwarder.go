@@ -75,7 +75,8 @@ func AddOptionsForForwarderConfigImpl(prefix string, defaultConfig *ForwarderCon
 type TxForwarder struct {
 	ctx context.Context
 
-	enabled   atomic.Bool
+	enabled atomic.Bool
+	// 포워딩 HTTP 요청의 타임아웃 기간.
 	timeout   time.Duration
 	transport *http.Transport
 
@@ -83,9 +84,10 @@ type TxForwarder struct {
 	healthErr     error
 	healthChecked time.Time
 
-	targets               []string
-	rpcClients            []*rpc.Client
-	ethClients            []*ethclient.Client
+	targets    []string
+	rpcClients []*rpc.Client
+	ethClients []*ethclient.Client
+	// 새로운 포워더를 시도할 에러를 매칭하는 정규 표현식, 에러 메시지가 "연결 실패"나 "서버 다운"처럼 '다른 노드에 재시도 해볼 만한' 종류의 네트워크 에러인지 정규식으로 확인
 	tryNewForwarderErrors *regexp.Regexp
 }
 
@@ -148,6 +150,7 @@ func (f *TxForwarder) PublishTransaction(inctx context.Context, tx *types.Transa
 		if err != nil {
 			log.Warn("error forwarding transaction to a backup target", "target", f.targets[pos], "err", err)
 		}
+		// 에러 메시지가 에러 메시지가 "연결 실패"나 "서버 다운"처럼 '다른 노드에 재시도 해볼 만한' 종류의 네트워크 에러가 아니면 에러 발생
 		if err == nil || !f.tryNewForwarderErrors.MatchString(err.Error()) {
 			return err
 		}

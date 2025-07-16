@@ -249,8 +249,11 @@ func (i *txQueueItem) returnResult(err error) {
 }
 
 type nonceCache struct {
+	// 주소 -> 최신 nonce
 	cache *containers.LruCache[common.Address, uint64]
+	// 현재 블록 해시
 	block common.Hash
+	// 캐시에 반영되지 않는 헤더
 	dirty *types.Header
 }
 
@@ -404,8 +407,13 @@ type Sequencer struct {
 	l1Reader        *headerreader.HeaderReader
 	config          SequencerConfigFetcher
 	senderWhitelist map[common.Address]struct{}
-	nonceCache      *nonceCache
-	nonceFailures   *nonceFailureCache
+	// sender의 현재 논스를 조회하도록 지원
+	nonceCache *nonceCache
+	// Too High Nonce 트랜잭션들을 cache에 담아 보류
+	// 사용자가 nonce가 너무 높게 설정된 트랜잭션을 보낼 때,
+	// 이 트랜잭션은 즉시 실행 불가능하지만,
+	// 앞선 논스(nonce)의 트랜잭션이 먼저 처리되면 나중에라도 처리될 수 있음
+	nonceFailures *nonceFailureCache
 	// 특정 사용자가 우선적으로 트랜잭션을 처리할 수 있도록 하는 Arbitrum의 MEV 완화 솔루션 관련 로직을 처리
 	expressLaneService *expressLaneService
 	onForwarderSet     chan struct{}
@@ -426,7 +434,7 @@ type Sequencer struct {
 	expectedSurplusUpdated      bool
 	expectedSurplusFailureCount int
 	auctioneerAddr              common.Address
-	// Timeboost 경매를 종료시키는 특별한 트랜잭션이 대기하는 우선순위가 매우 높은 큐
+	// 특별한 RPC 엔드포인트를 호출하여 경매 결과 트랜잭션을 받은 Queue
 	timeboostAuctionResolutionTxQueue chan txQueueItem
 }
 
@@ -919,8 +927,10 @@ func (s *Sequencer) expireNonceFailures() *time.Timer {
 		}
 		untilExpiry := time.Until(failure.expiry)
 		if untilExpiry > 0 {
+			// nonceFailures 만료 전이면 만료까지 남은 시간만큼 타이머를 생성하여 반환
 			return time.NewTimer(untilExpiry)
 		}
+		// nonceFailures 만료 후이면 삭제
 		s.nonceFailures.RemoveOldest()
 	}
 }
@@ -960,6 +970,7 @@ func (s *Sequencer) precheckNonces(queueItems []txQueueItem, totalBlockSize int)
 			continue
 		}
 		stateNonce := s.nonceCache.Get(latestHeader, latestState, sender)
+		// 예상 논스를 저장하는 pendingNonces[]
 		pendingNonce, pending := pendingNonces[sender]
 		if !pending {
 			pendingNonce = stateNonce
@@ -1037,6 +1048,9 @@ func (s *Sequencer) createBlock(ctx context.Context) (returnValue bool) {
 			returnValue = true
 		}
 	}()
+	// nonceFailures.Len() :  nonceFailures 캐시 내에 현재 저장된 항목의 개수
+	// nonceFailureCacheSizeGauge : nonceFailures 캐시에 저장된 항목 개수를 실시간으로 모니터링하는 Gauge 타입 메트릭
+	// 이 함수가 어떻게 끝나든, 종료 직전에 논스 실패 캐시의 현재 크기를 모니터링 시스템에 기록합니다.
 	defer nonceFailureCacheSizeGauge.Update(int64(s.nonceFailures.Len()))
 
 	config := s.config()
@@ -1044,6 +1058,7 @@ func (s *Sequencer) createBlock(ctx context.Context) (returnValue bool) {
 
 	// Clear out old nonceFailures
 	s.nonceFailures.Resize(config.NonceFailureCacheSize)
+	// nonceFailures의 만료 까지의 남은 시간을 타이머로 설정
 	nextNonceExpiryTimer := s.expireNonceFailures()
 	defer func() {
 		// We wrap this in a closure as to not cache the current value of nextNonceExpiryTimer
@@ -1064,6 +1079,7 @@ func (s *Sequencer) createBlock(ctx context.Context) (returnValue bool) {
 				// this function (Sequencer.createBlock). So it is sufficient to check its
 				// len at the start of this loop, since items can't be added to it asynchronously,
 				// which is not true for the main txQueue or timeboostAuctionResolutionQueue.
+				// txRetryQueue에서 가장 앞에 있는 아이템을 꺼내고 반환
 				queueItem = s.txRetryQueue.Pop()
 			}
 		} else if len(queueItems) == 0 {
@@ -1125,6 +1141,9 @@ func (s *Sequencer) createBlock(ctx context.Context) (returnValue bool) {
 		}
 		if queueItem.isTimeboosted &&
 			queueItem.blockStamp != 0 &&
+			// lastBlock.Number.Uint64(): 현재 처리 중인 L2 블록의 번호
+			// queueItem.blockStamp: 트랜잭션이 큐에 들어왔을 때의 블록 번호
+			// config.Timeboost.QueueTimeoutInBlocks : 우선순위 트랜잭션이 대기할 수 있는 최대 블록의 개수
 			lastBlock.Number.Uint64() >= queueItem.blockStamp+config.Timeboost.QueueTimeoutInBlocks {
 			err := fmt.Errorf("timeboosted tx: %s has hit block based timeout. currentBlockNum: %d, blockStamp: %d, blockExpiry: %d",
 				queueItem.tx.Hash(),
@@ -1135,7 +1154,7 @@ func (s *Sequencer) createBlock(ctx context.Context) (returnValue bool) {
 			queueItem.returnResult(err) // this isnt read by anyone, so we log
 			log.Info("Error sequencing timeboost tx", "err", err)
 			continue
-		}
+		} // GasFeeCap이 BaseFee 보다 작은지 확인
 		if arbmath.BigLessThan(queueItem.tx.GasFeeCap(), lastBlock.BaseFee) {
 			queueItem.returnResult(fmt.Errorf("%w: maxFeePerGas: %s baseFee: %s", core.ErrFeeCapTooLow, queueItem.tx.GasFeeCap(), lastBlock.BaseFee))
 			continue
