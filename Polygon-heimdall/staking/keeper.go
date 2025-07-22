@@ -374,12 +374,14 @@ func (k *Keeper) GetSignerFromValidatorID(ctx sdk.Context, valID hmTypes.Validat
 
 // GetValidatorFromValID returns signer from validator ID
 func (k *Keeper) GetValidatorFromValID(ctx sdk.Context, valID hmTypes.ValidatorID) (validator hmTypes.Validator, ok bool) {
+	// validatorID를 키로 사용하여 signer address를 얻음
 	signerAddr, ok := k.GetSignerFromValidatorID(ctx, valID)
 	if !ok {
 		return validator, ok
 	}
 
 	// query for validator signer address
+	// signer address를 키로 사용하여 validator 객체를 반환
 	validator, err := k.GetValidatorInfo(ctx, signerAddr.Bytes())
 	if err != nil {
 		return validator, false

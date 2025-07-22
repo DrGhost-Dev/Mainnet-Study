@@ -491,6 +491,7 @@ func (c *ContractCaller) GetMaticChainBlock(blockNum *big.Int) (header *ethTypes
 	if c.MaticGrpcFlag {
 		if blockNum == nil {
 			// LatestBlockNumber is BlockNumber(-2) in go-ethereum rpc
+			// go-ethereum에서는 -2가 최신 블록을 의미
 			latestBlock, err = c.MaticGrpcClient.HeaderByNumber(ctx, -2)
 		} else {
 			latestBlock, err = c.MaticGrpcClient.HeaderByNumber(ctx, blockNum.Int64())

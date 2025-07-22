@@ -509,6 +509,7 @@ func (k *Keeper) getBorBlockForSpanSeed(ctx sdk.Context, seedSpan *hmTypes.Span,
 
 	if proposedSpanID == 1 {
 		borBlock = 1
+		// 첫 번째 블록을 생성하고 서명한 주소를 얻음
 		author, err = k.contractCaller.GetBorChainBlockAuthor(big.NewInt(int64(borBlock)))
 		if err != nil {
 			logger.Error("Error fetching first block for span seed", "error", err, "block", borBlock)
@@ -522,7 +523,7 @@ func (k *Keeper) getBorBlockForSpanSeed(ctx sdk.Context, seedSpan *hmTypes.Span,
 
 	uniqueAuthors := make(map[string]struct{})
 	spanID := proposedSpanID - 1
-
+	// spanID일때 블록에 서명한 author를 불러옴
 	lastAuthor, err := k.GetSeedProducer(ctx, spanID)
 	if err != nil {
 		logger.Error("Error fetching last seed producer", "error", err, "span id", spanID)
@@ -530,6 +531,7 @@ func (k *Keeper) getBorBlockForSpanSeed(ctx sdk.Context, seedSpan *hmTypes.Span,
 	}
 
 	// get seed block authors from last "blockProducerMaxSpanLookback" spans
+	//										10									50
 	for i := 0; len(uniqueAuthors) < blockAuthorsCollisionCheck && i < blockProducerMaxSpanLookback; i++ {
 		if spanID == 0 {
 			break
@@ -545,7 +547,7 @@ func (k *Keeper) getBorBlockForSpanSeed(ctx sdk.Context, seedSpan *hmTypes.Span,
 			logger.Info("GetSeedProducer returned empty value", "span id", spanID)
 			break
 		}
-
+		// spanID에 해당하는 author 목록
 		uniqueAuthors[author.Hex()] = struct{}{}
 		spanID--
 	}
