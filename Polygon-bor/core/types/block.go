@@ -89,14 +89,15 @@ type Header struct {
 	TxHash      common.Hash    `json:"transactionsRoot" gencodec:"required"`
 	ReceiptHash common.Hash    `json:"receiptsRoot"     gencodec:"required"`
 	Bloom       Bloom          `json:"logsBloom"        gencodec:"required"`
-	Difficulty  *big.Int       `json:"difficulty"       gencodec:"required"`
-	Number      *big.Int       `json:"number"           gencodec:"required"`
-	GasLimit    uint64         `json:"gasLimit"         gencodec:"required"`
-	GasUsed     uint64         `json:"gasUsed"          gencodec:"required"`
-	Time        uint64         `json:"timestamp"        gencodec:"required"`
-	Extra       []byte         `json:"extraData"        gencodec:"required"`
-	MixDigest   common.Hash    `json:"mixHash"`
-	Nonce       BlockNonce     `json:"nonce"`
+	// 블록의 우선순위를 결정하기 위한 점수. 점수가 높을수록 블록 만들 차례가 가까움
+	Difficulty *big.Int    `json:"difficulty"       gencodec:"required"`
+	Number     *big.Int    `json:"number"           gencodec:"required"`
+	GasLimit   uint64      `json:"gasLimit"         gencodec:"required"`
+	GasUsed    uint64      `json:"gasUsed"          gencodec:"required"`
+	Time       uint64      `json:"timestamp"        gencodec:"required"`
+	Extra      []byte      `json:"extraData"        gencodec:"required"`
+	MixDigest  common.Hash `json:"mixHash"`
+	Nonce      BlockNonce  `json:"nonce"`
 
 	// BaseFee was added by EIP-1559 and is ignored in legacy headers.
 	BaseFee *big.Int `json:"baseFeePerGas" rlp:"optional"`

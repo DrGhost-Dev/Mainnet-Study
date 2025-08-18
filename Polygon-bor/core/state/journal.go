@@ -49,7 +49,9 @@ type journalEntry interface {
 // commit. These are tracked to be able to be reverted in the case of an execution
 // exception or request for reversal.
 type journal struct {
-	entries []journalEntry         // Current changes tracked by the journal
+	entries []journalEntry // Current changes tracked by the journal
+	// 어떤 계정이 몇 번이나 변경되었는지 추적하여, 최종 커밋 시 효율적으로 처리하기 위한 데이터
+	// map[상태가 변경된 모든 종류의 이더리움 주소]
 	dirties map[common.Address]int // Dirty accounts and the number of changes
 
 	validRevisions []revision

@@ -46,7 +46,8 @@ type ValidatorSet struct {
 
 	// cached (unexported)
 	totalVotingPower int64
-	validatorsMap    map[common.Address]int // address -> index
+	// validator가 validators목록에서 몇 번째 index에 위치하는지 출력함
+	validatorsMap map[common.Address]int // address -> index
 }
 
 // NewValidatorSet initializes a ValidatorSet by copying over the

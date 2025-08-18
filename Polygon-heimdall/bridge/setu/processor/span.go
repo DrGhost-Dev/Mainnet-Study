@@ -104,7 +104,7 @@ func (sp *SpanProcessor) checkAndPropose() {
 
 	sp.Logger.Debug("Found last span", "lastSpan", lastSpan.ID, "startBlock", lastSpan.StartBlock, "endBlock", lastSpan.EndBlock)
 
-	// 예상되는 다음 Span의 정보를 가지고 옴
+	// 다음 Span 정보를 조회해 옴
 	nextSpanMsg, err := sp.fetchNextSpanDetails(lastSpan.ID+1, lastSpan.EndBlock+1)
 	if err != nil {
 		sp.Logger.Error("Unable to fetch next span details", "error", err, "lastSpanId", lastSpan.ID)
@@ -244,6 +244,7 @@ func (sp *SpanProcessor) fetchNextSpanDetails(id uint64, start uint64) (*types.S
 	}
 
 	q := req.URL.Query()
+	// id를 10진수 문자열로 변환
 	q.Add("span_id", strconv.FormatUint(id, 10))
 	q.Add("start_block", strconv.FormatUint(start, 10))
 	q.Add("chain_id", configParams.ChainParams.BorChainID)

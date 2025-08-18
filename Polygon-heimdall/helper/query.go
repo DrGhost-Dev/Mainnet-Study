@@ -350,6 +350,7 @@ func FetchSideTxSigs(
 	sideTxData []byte,
 ) ([][3]*big.Int, error) {
 	// get block client
+	// 블록의 전체 상세 정보를 노드로 부터 가져옴
 	blockDetails, err := GetBlockWithClient(client, height)
 
 	if err != nil {

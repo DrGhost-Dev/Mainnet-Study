@@ -33,6 +33,7 @@ import (
 	"github.com/holiman/uint256"
 )
 
+// key-value : storage slot address - value
 type Storage map[common.Hash]common.Hash
 
 func (s Storage) Copy() Storage {
@@ -45,9 +46,12 @@ func (s Storage) Copy() Storage {
 // - First you need to obtain a state object.
 // - Account values as well as storages can be accessed and modified through the object.
 // - Finally, call commit to return the changes of storage trie and update account data.
+// Live Object, 현재 실행 중인 트랜잭션에 의해 메모리에 로드된, '활성 상태인' 이더리움 계정 하나의 정보를 담고 있는 객체
 type stateObject struct {
-	db       *StateDB
-	address  common.Address      // address of ethereum account
+	db *StateDB
+	// 이더리움 계정의 주소, 우리가 흔히 보는 주소
+	address common.Address // address of ethereum account
+	// address를 keccack256 해시 값
 	addrHash common.Hash         // hash of ethereum address of the account
 	origin   *types.StateAccount // Account original data without any change applied, nil means it was not existent
 	data     types.StateAccount  // Account data with all mutations applied in the scope of block
@@ -70,6 +74,7 @@ type stateObject struct {
 	// boundary; however post the byzantium fork, the commit will only be performed
 	// at the end of block, this set essentially tracks all the modifications
 	// made within the block.
+	// 블록 내 스토리지 슬롯의 원본 값을 기록하는 공간
 	uncommittedStorage Storage
 
 	// Cache flags.
@@ -77,6 +82,7 @@ type stateObject struct {
 
 	// Flag whether the account was marked as self-destructed. The self-destructed
 	// account is still accessible in the scope of same transaction.
+	// false이면 active 상태, true이면 삭제 예정 태그, 트랜잭션이 최종적으로 성공하고 끝나는 순간 stateObject 계정 데이터가 State Trie에서 삭제됨
 	selfDestructed bool
 
 	// This is an EIP-6780 flag indicating whether the object is eligible for
@@ -144,6 +150,7 @@ func (s *stateObject) getTrie() (Trie, error) {
 // trie in the state object. The caller might want to do that, but it's cleaner
 // to break the hidden interdependency between retrieving tries from the db or
 // from the prefetcher.
+// prefetcher가 미리 준비해 둔 storageTrie가 있으면 가져오는 역할
 func (s *stateObject) getPrefetchedTrie() Trie {
 	// If there's nothing to meaningfully return, let the user figure it out by
 	// pulling the trie from disk.
@@ -250,6 +257,7 @@ func (s *stateObject) finalise() {
 		if origin, exist := s.uncommittedStorage[key]; exist && origin == value {
 			// The slot is reverted to its original value, delete the entry
 			// to avoid thrashing the data structures.
+			// 변경된 값이 원본과 같기 때문에 uncommittedStorage에 저장할 필요가 없음
 			delete(s.uncommittedStorage, key)
 		} else if exist {
 			// The slot is modified to another value and the slot has been
@@ -269,17 +277,19 @@ func (s *stateObject) finalise() {
 		s.pendingStorage[key] = value
 	}
 	if s.db.prefetcher != nil && len(slotsToPrefetch) > 0 && s.data.Root != types.EmptyRootHash {
+		// slotsToPrefetch에 저장된 특정 슬롯에 대한 데이터들을 데이터베이스에서 메모리로 미리 가져와 성능 최적화 작업
 		if err := s.db.prefetcher.prefetch(s.addrHash, s.data.Root, s.address, nil, slotsToPrefetch, false); err != nil {
 			log.Error("Failed to prefetch slots", "addr", s.address, "slots", len(slotsToPrefetch), "err", err)
 		}
 	}
-
+	// dirtyStorage 내부를 비움
 	if len(s.dirtyStorage) > 0 {
 		s.dirtyStorage = make(Storage)
 	}
 	// Revoke the flag at the end of the transaction. It finalizes the status
 	// of the newly-created object as it's no longer eligible for self-destruct
 	// by EIP-6780. For non-newly-created objects, it's a no-op.
+	// selfDestruct 악용 방지
 	s.newContract = false
 }
 

@@ -54,8 +54,10 @@ const (
 	deletion
 )
 
+// StateDB가 데이터베이스에 최종 변경사항을 커밋 할 때, 최종결과를 요약해 놓은 태그
 type mutation struct {
-	typ     mutationType
+	typ mutationType
+	// 영구적인 디스크 데이터베이스에 최종적으로 적용(저장)되었는지 여부를 추적하는 상태
 	applied bool
 }
 
@@ -90,6 +92,7 @@ type StateDB struct {
 
 	// This map holds 'live' objects, which will get modified while
 	// processing a state transition.
+	// 인메모리 캐시   map[이더리움 계정 주소]
 	stateObjects map[common.Address]*stateObject
 
 	// This map holds 'deleted' objects. An object with the same address
@@ -97,12 +100,15 @@ type StateDB struct {
 	// resurrection. The account value is tracked as the original value
 	// before the transition. This map is populated at the transaction
 	// boundaries.
+	// 소멸 후 부활하는 특수한 경우를 처리하기 위해, 소멸 직전의 원본 계정 상태를 임시 저장
 	stateObjectsDestruct map[common.Address]*stateObject
 
 	// This map tracks the account mutations that occurred during the
 	// transition. Uncommitted mutations belonging to the same account
 	// can be merged into a single one which is equivalent from database's
 	// perspective. This map is populated at the transaction boundaries.
+	// 어떤 종류의 작업이 계정에 발생했는지를 요약하여 데이터베이스 쓰기 작업을 최적화하기 위한 추적 장치
+	// map[이더리움 계정]
 	mutations map[common.Address]*mutation
 
 	// Block-stm related fields
@@ -143,9 +149,11 @@ type StateDB struct {
 
 	// Journal of state modifications. This is the backbone of
 	// Snapshot and RevertToSnapshot.
+	// 트랜잭션이 실행되는 동안 발생하는 모든 상태 변경(잔액, 논스, 스토리지 등)을 되돌릴 수 있도록(revertible) 기록하는 작업 일지
 	journal *journal
 
 	// State witness if cross validation is needed
+	// 전체 상태 데이터베이스 없이도 블록의 유효성을 검증하기 위해, 필요한 최소한의 데이터와 암호학적 증거를 담아놓은 데이터 묶음
 	witness *stateless.Witness
 
 	// Measurements gathered during execution for debugging purposes
@@ -1183,8 +1191,11 @@ func (s *StateDB) GetRefund() uint64 {
 // the journal as well as the refunds. Finalise, however, will not push any updates
 // into the tries just yet. Only IntermediateRoot or Commit will do that.
 func (s *StateDB) Finalise(deleteEmptyObjects bool) {
+	// 이번 블록에 포함된 모든 트랜잭션으로 인해 변경된 모든 계정 주소의 누적 목록만큼 슬라이스를 만듦
 	addressesToPrefetch := make([]common.Address, 0, len(s.journal.dirties))
+	// addr: dirties에 저장된 상태가 변경된 이더리움 주소
 	for addr := range s.journal.dirties {
+		// 인메모리 상태, 활성 상태
 		obj, exist := s.stateObjects[addr]
 		if !exist {
 			// ripeMD is 'touched' at block 1714175, in tx 0x1237f737031e40bcde4a8b7e717b2d15e3ecadfe49bb1bbc71ee9deb09c6fcf2
@@ -1202,10 +1213,13 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 			// We need to maintain account deletions explicitly (will remain
 			// set indefinitely). Note only the first occurred self-destruct
 			// event is tracked.
+			// 계정이 한 블록 내에서 소멸했다가 다시 부활하는 유효한(valid) 상태 전환 규칙을 처리하여 데이터의 정합성을 지킴
 			if _, ok := s.stateObjectsDestruct[obj.address]; !ok {
 				s.stateObjectsDestruct[obj.address] = obj
 			}
 		} else {
+			// 이번 트랜잭션에서 변경된 스토리지 슬롯들을 정리하면서, 이번 블록에서 처음 수정된 슬롯은 slotsToPrefetch에 추가하고
+			// 최신 데이터는 pendingStorage로 옮긴 후, prefetch를 요청하고 마지막으로 dirtyStorage을 비움
 			obj.finalise()
 			s.markUpdate(addr)
 		}
@@ -1216,6 +1230,8 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 	}
 
 	if s.prefetcher != nil && len(addressesToPrefetch) > 0 {
+		// addressesToPrefetch에 저장된 모든 계정 주소에 대한 상태(StateAccount) 데이터를,
+		// 월드 스테이트 트라이(World State Trie)에서 미리 읽어오는 성능 최적화 작업
 		if err := s.prefetcher.prefetch(common.Hash{}, s.originalRoot, common.Address{}, addressesToPrefetch, nil, false); err != nil {
 			log.Error("Failed to prefetch addresses", "addresses", len(addressesToPrefetch), "err", err)
 		}
@@ -1224,18 +1240,22 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 	s.clearJournalAndRefund()
 }
 
-// IntermediateRoot computes the current root hash of the state trie.
+// IntermediateRoot computes the current root hash of the state trie(World State Trie).
 // It is called in between transactions to get the root hash that
 // goes into transaction receipts.
 func (s *StateDB) IntermediateRoot(deleteEmptyObjects bool) common.Hash {
 	// Finalise all the dirty storage states and write them into the tries
+	// 트랜잭션들이 모여 블록이 생성되는 과정에서 발생한 모든 상태 변화를,
+	// 최종적으로 데이터베이스에 안전하고 효율적으로 기록하기 위해 데이터를 최종 확정하고 메모리 상태를 깨끗하게 정리하는 준비 단계
 	s.Finalise(deleteEmptyObjects)
 
 	// If there was a trie prefetcher operating, terminate it async so that the
 	// individual storage tries can be updated as soon as the disk load finishes.
 	if s.prefetcher != nil {
+		// prefetcher에게 비동기적으로 종료 시킴
 		s.prefetcher.terminate(true)
 		defer func() {
+			// prefetcher의 최종 성과를 보고 받고 객체를 nil
 			s.prefetcher.report()
 			s.prefetcher = nil // Pre-byzantium, unset any used up prefetcher
 		}()
@@ -1914,7 +1934,9 @@ func (s *StateDB) markUpdate(addr common.Address) {
 	if _, ok := s.mutations[addr]; !ok {
 		s.mutations[addr] = &mutation{}
 	}
+	// 데이터 베이스에 저장되지 않는 상태
 	s.mutations[addr].applied = false
+	// 이 계정의 최종 변경 유형을 update으로 분류함
 	s.mutations[addr].typ = update
 }
 

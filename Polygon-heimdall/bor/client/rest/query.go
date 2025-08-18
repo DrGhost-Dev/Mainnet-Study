@@ -392,6 +392,7 @@ type borPrepareNextSpanParam struct {
 //	200: borSpanResponse
 func prepareNextSpanHandlerFn(cliCtx context.CLIContext) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// 컨텍스트의 height 필드 값을 수정하여 새 컨텍스트를 반환함
 		cliCtx, ok := rest.ParseQueryHeightOrReturnBadRequest(w, cliCtx, r)
 		if !ok {
 			return
@@ -458,7 +459,7 @@ func prepareNextSpanHandlerFn(cliCtx context.CLIContext) http.HandlerFunc {
 		//
 		// Validators
 		//
-
+		// Heimdall 내부 Tendermint 노드에 ABCI Query로 경로에 메시지를 보내 KVStore에 저장된 validatorSetBytes를 불러옴
 		validatorSetBytes, _, err := cliCtx.QueryWithData(fmt.Sprintf("custom/%s/%s", stakingTypes.QuerierRoute, stakingTypes.QueryCurrentValidatorSet), nil)
 		if err != nil {
 			hmRest.WriteErrorResponse(w, http.StatusInternalServerError, err.Error())

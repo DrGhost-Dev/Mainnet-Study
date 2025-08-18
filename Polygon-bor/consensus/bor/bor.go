@@ -1004,7 +1004,7 @@ func (c *Bor) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *typ
 	}
 
 	// No block rewards in PoA, so the state remains as it is
-	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
+	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number)) // 현재 블록이 EIP158이 적용된 이후인지 확인
 
 	// Uncles are dropped
 	header.UncleHash = types.CalcUncleHash(nil)

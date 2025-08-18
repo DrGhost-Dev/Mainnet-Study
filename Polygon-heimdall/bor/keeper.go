@@ -291,6 +291,7 @@ func (k *Keeper) SelectNextProducers(ctx sdk.Context, seed common.Hash, prevVals
 	if len(prevVals) > 0 {
 		// rollback voting powers for the selection algorithm
 		// 검증자들의 투표 파워(스테이킹 지분)를 두 스팬 이전의 상태로 되돌립니다.
+		// 단기적인 조작 행위를 원천적으로 무효화시킴
 		spanEligibleVals = rollbackVotingPowers(ctx, spanEligibleVals, prevVals)
 	}
 

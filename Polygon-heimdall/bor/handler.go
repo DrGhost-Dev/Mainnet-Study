@@ -127,7 +127,9 @@ func HandleMsgProposeSpan(ctx sdk.Context, msg sdk.Msg, k Keeper) sdk.Result {
 	// 이벤트 발생
 	// 모든 검증을 통과했으므로, "새로운 스팬이 성공적으로 제안되었다"는 이벤트를 발생시킵니다.
 	// 다른 노드나 외부 시스템이 이 정보를 활용할 수 있습니다.
+	// 이벤트 관리자를 불러옴
 	ctx.EventManager().EmitEvents(sdk.Events{
+		// 새로운 이벤트를 만듦
 		sdk.NewEvent(
 			types.EventTypeProposeSpan,
 			sdk.NewAttribute(sdk.AttributeKeyModule, types.AttributeValueCategory),

@@ -810,8 +810,9 @@ func (c CliqueConfig) String() string {
 
 // BorConfig is the consensus engine configs for Matic bor based sealing.
 type BorConfig struct {
-	Period                     map[string]uint64      `json:"period"`                   // Number of seconds between blocks to enforce
-	ProducerDelay              map[string]uint64      `json:"producerDelay"`            // Number of seconds delay between two producer interval
+	Period        map[string]uint64 `json:"period"`        // Number of seconds between blocks to enforce
+	ProducerDelay map[string]uint64 `json:"producerDelay"` // Number of seconds delay between two producer interval
+	// string : block number(string), the start of a new ruleset
 	Sprint                     map[string]uint64      `json:"sprint"`                   // Epoch length to proposer
 	BackupMultiplier           map[string]uint64      `json:"backupMultiplier"`         // Backup multiplier to determine the wiggle time
 	ValidatorContract          string                 `json:"validatorContract"`        // Validator set contract

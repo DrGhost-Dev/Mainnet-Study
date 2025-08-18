@@ -520,14 +520,15 @@ func (cp *CheckpointProcessor) createAndSendCheckpointToRootchain(checkpointCont
 
 	// fetch side txs sigs
 	decoder := helper.GetTxDecoder(authTypes.ModuleCdc)
-	// 트랜잭션 데이터를 디코딩하여 원래의 메시지 형태로 복원합니다.
+	// 디코딩하여 표준 트랜잭션 객체로 변환
 	stdTx, err := decoder(tx.Tx)
 	if err != nil {
 		cp.Logger.Error("Error while decoding checkpoint tx", "txHash", tx.Tx.Hash(), "error", err)
 		return err
 	}
-
+	// 트랜잭션 객체에서 메시지를 추출
 	cmsg := stdTx.GetMsgs()[0]
+	// 추출한 메시지가 SideTxMsg 타입인지 확인
 	sideMsg, ok := cmsg.(hmTypes.SideTxMsg)
 	if !ok {
 		cp.Logger.Error("Invalid side-tx msg", "txHash", tx.Tx.Hash())
@@ -535,7 +536,7 @@ func (cp *CheckpointProcessor) createAndSendCheckpointToRootchain(checkpointCont
 	}
 
 	// side-tx data
-	// 서명에 사용된 원본 데이터를 가져옵니다.
+	// 서명했던 원본 데이터를 가져옵니다.
 	sideTxData := sideMsg.GetSideSignBytes()
 
 	// get sigs

@@ -378,12 +378,12 @@ func GetSignedTxBytes(cliCtx context.CLIContext,
 	if err != nil {
 		return nil, err
 	}
-
+	// 지갑 별칭
 	fromName := cliCtx.GetFromName()
 	if fromName == "" {
 		return txBldr.BuildAndSign(GetPrivKey(), msgs)
 	}
-
+	// 트랜잭션 서명하기 전에 사용자에게 프롬프트를 띄울지 말지 결정하는 부분
 	if !cliCtx.SkipConfirm {
 		stdSignMsg, e := txBldr.BuildSignMsg(msgs)
 		if e != nil {
@@ -478,9 +478,12 @@ func PrepareTxBuilder(cliCtx context.CLIContext, txBldr authTypes.TxBuilder) (au
 	}
 
 	// get heimdall address
+	// 내 노드의 주소를 HeimdallAddress 타입으로 변환
 	fhAddress := types.BytesToHeimdallAddress(from)
 
+	// cliCtx를 AccountRetriever 객체로 만듦
 	accGetter := authTypes.NewAccountRetriever(cliCtx)
+	// fhAddress가 Heimdall 체인의 KVStore에서 fhAddress에 해당하는 Account 레코드가 있는지 ABCI Query로 조회해 확인을 함
 	if err := accGetter.EnsureExists(fhAddress); err != nil {
 		return txBldr, err
 	}
@@ -489,6 +492,7 @@ func PrepareTxBuilder(cliCtx context.CLIContext, txBldr authTypes.TxBuilder) (au
 	// TODO: (ref #1903) Allow for user supplied account number without
 	// automatically doing a manual lookup.
 	if txbldrAccNum == 0 || txbldrAccSeq == 0 {
+		// ABCI Query를 통해 Heimdall 체인의 KVStore에서 ftAddress의 Account 레코드를 읽어 account와 sequence를 불러옴
 		num, seq, err := authTypes.NewAccountRetriever(cliCtx).GetAccountNumberSequence(fhAddress)
 		if err != nil {
 			return txBldr, err

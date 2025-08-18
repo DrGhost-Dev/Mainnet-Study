@@ -118,7 +118,7 @@ func SideHandleMsgSpan(ctx sdk.Context, k Keeper, msg sdk.Msg, contractCaller he
 	}
 
 	// fetch current child block
-	// Bor체인의 최신 블록 번호를 가지고 옴
+	// Bor체인의 최신 블록 헤더를 가지고 옴
 	childBlock, err := contractCaller.GetMaticChainBlock(nil)
 	if err != nil {
 		k.Logger(ctx).Error("Error fetching current child block", "error", err)

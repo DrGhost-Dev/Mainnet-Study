@@ -57,6 +57,7 @@ func returnHasherToPool(h *hasher) {
 // hash collapses a node down into a hash node.
 func (h *hasher) hash(n node, force bool) node {
 	// Return the cached hash if it's available
+	// n.flags.hash, dirty : 노드의 계산된 해시 값을 저장
 	if hash, _ := n.cache(); hash != nil {
 		return hash
 	}

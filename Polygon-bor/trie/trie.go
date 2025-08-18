@@ -48,6 +48,7 @@ type Trie struct {
 	// Keep track of the number leaves which have been inserted since the last
 	// hashing operation. This number will not directly map to the number of
 	// actually unhashed nodes.
+	// 리프노드가 추가된 횟수
 	unhashed int
 
 	// uncommitted is the number of updates since last commit.
